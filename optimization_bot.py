@@ -315,7 +315,7 @@ class OptimizationBot:
         self.validator = validator or ScriptValidator()
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = anthropic.Anthropic(api_key=api_key, proxies=None)
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     
     async def generate_new_script(self, message):
@@ -668,7 +668,7 @@ read -p "Нажмите Enter для выхода..."
 ### Способ 2: Через Терминал
 1. Откройте Терминал
 2. Перейдите в папку со скриптами командой `cd путь/к/папке/со/скриптами`
-3. Сделайте скрипт исполняемым: `chmod +x MacOptimizer.sh`
+3. Сделайте скрипт исполняемым: `chmod +x MacOptimizer.sh StartOptimizer.command`
 4. Запустите скрипт: `sudo ./MacOptimizer.sh`
 5. Дождитесь завершения работы скрипта
 
