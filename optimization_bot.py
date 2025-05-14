@@ -317,24 +317,49 @@ class OptimizationBot:
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
         
+        # Проверка и коррекция API ключа
+        if api_key and not api_key.startswith("sk-"):
+            # Если ключ не имеет префикса, попробуем добавить его
+            api_key_to_use = f"sk-{api_key}"
+            logger.info("API ключ не содержит префикс 'sk-', добавляем его автоматически")
+        else:
+            api_key_to_use = api_key
+            
+        logger.info(f"Попытка инициализации API клиента с ключом длиной {len(api_key_to_use) if api_key_to_use else 0} символов")
+        
         # Универсальная инициализация клиента Anthropic для поддержки разных версий
         try:
             # Для версии 0.3.x-0.5.x
-            self.client = anthropic.Client(api_key=api_key)
+            self.client = anthropic.Client(api_key=api_key_to_use)
             self.client_method = "completion"
             logger.info("Используется клиент Anthropic версии 0.3.x-0.5.x")
-        except (TypeError, AttributeError):
+        except (TypeError, AttributeError) as e1:
+            logger.warning(f"Ошибка при инициализации старого клиента: {e1}")
             try:
-                # Для версии >= 0.6.x
-                self.client = anthropic.Anthropic(api_key=api_key)
-                self.client_method = "messages.create"
-                logger.info("Используется клиент Anthropic версии >= 0.6.x")
-            except Exception as e:
-                logger.error(f"Ошибка при инициализации клиента Anthropic: {e}")
-                # Fallback - используем заглушку
-                self.client = None
-                self.client_method = None
-                logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
+                # Попробуем без префикса sk- для новых версий API
+                self.client = anthropic.Client(api_key=api_key)
+                self.client_method = "completion"
+                logger.info("Используется клиент Anthropic версии 0.3.x-0.5.x (без префикса)")
+            except Exception as e2:
+                logger.warning(f"Ошибка при инициализации старого клиента без префикса: {e2}")
+                try:
+                    # Для версии >= 0.6.x
+                    self.client = anthropic.Anthropic(api_key=api_key_to_use)
+                    self.client_method = "messages.create"
+                    logger.info("Используется клиент Anthropic версии >= 0.6.x")
+                except Exception as e3:
+                    logger.error(f"Ошибка при инициализации нового клиента: {e3}")
+                    try:
+                        # Для версии >= 0.6.x без префикса
+                        self.client = anthropic.Anthropic(api_key=api_key)
+                        self.client_method = "messages.create"
+                        logger.info("Используется клиент Anthropic версии >= 0.6.x (без префикса)")
+                    except Exception as e4:
+                        logger.error(f"Все попытки инициализации клиента Anthropic завершились ошибкой: {e4}")
+                        # Fallback - используем заглушку
+                        self.client = None
+                        self.client_method = None
+                        logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
                 
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     

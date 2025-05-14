@@ -1,19 +1,55 @@
-import anthropic
-import pkg_resources
+#!/usr/bin/env python
 import os
 import sys
+import pkg_resources
+from dotenv import load_dotenv
 
-print(f"Python version: {sys.version}")
-print(f"Anthropic version: {pkg_resources.get_distribution('anthropic').version}")
-print(f"Anthropic module path: {anthropic.__file__}")
+# Загрузка переменных окружения
+load_dotenv()
 
-# Проверяем сигнатуру метода __init__ класса Anthropic
+# Получение версии Python
+python_version = sys.version
+print(f"Версия Python: {python_version}")
+
+# Получение установленной версии Anthropic
 try:
-    import inspect
-    sig = inspect.signature(anthropic.Anthropic.__init__)
-    print(f"Anthropic.__init__ signature: {sig}")
-except Exception as e:
-    print(f"Ошибка при получении сигнатуры: {e}")
+    anthropic_version = pkg_resources.get_distribution("anthropic").version
+    print(f"Установленная версия anthropic: {anthropic_version}")
+except pkg_resources.DistributionNotFound:
+    print("Библиотека anthropic не установлена")
 
-# Проверяем наличие переменной окружения
-print(f"RAILWAY_ENVIRONMENT: {os.getenv('RAILWAY_ENVIRONMENT')}") 
+# Проверка переменных окружения
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+if anthropic_key:
+    print(f"API ключ Anthropic: {anthropic_key[:5]}...{anthropic_key[-5:]}")
+    print(f"Длина ключа: {len(anthropic_key)}")
+    print(f"Начинается с sk-: {anthropic_key.startswith('sk-')}")
+else:
+    print("API ключ Anthropic не найден")
+
+# Проверка импорта библиотеки Anthropic
+try:
+    import anthropic
+    print("Библиотека anthropic успешно импортирована")
+    
+    # Пробуем создать клиент
+    try:
+        client = anthropic.Client(api_key=anthropic_key)
+        print("Клиент anthropic.Client успешно создан")
+    except Exception as e:
+        print(f"Ошибка при создании anthropic.Client: {e}")
+        
+    # Пробуем создать клиент нового API
+    try:
+        client = anthropic.Anthropic(api_key=anthropic_key)
+        print("Клиент anthropic.Anthropic успешно создан")
+    except Exception as e:
+        print(f"Ошибка при создании anthropic.Anthropic: {e}")
+        
+except Exception as e:
+    print(f"Ошибка при импорте библиотеки anthropic: {e}")
+
+# Проверка всех установленных пакетов
+print("\nУстановленные пакеты:")
+for package in pkg_resources.working_set:
+    print(f"{package.key}=={package.version}") 
