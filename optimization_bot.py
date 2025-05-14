@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 import telebot
 from telebot import types
 from telebot.async_telebot import AsyncTeleBot
+import time
 
 # Проверка на запуск только одного экземпляра бота - кросс-платформенная реализация
 def ensure_single_instance():
@@ -1817,7 +1818,11 @@ def main():
         logger.info(f"Обнаружено ошибок: {total_errors}")
         
         # Запуск бота
-        bot.infinity_polling()
+        try:
+            bot.polling(none_stop=True, interval=1, timeout=30)
+        except Exception as e:
+            logger.error(f"Ошибка в методе polling: {e}")
+            time.sleep(10)  # Пауза перед повторной попыткой
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
 
