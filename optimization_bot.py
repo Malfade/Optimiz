@@ -17,6 +17,7 @@ import telebot
 from telebot import types
 from telebot.async_telebot import AsyncTeleBot
 import time
+import pkg_resources
 
 # Проверка на запуск только одного экземпляра бота - кросс-платформенная реализация
 def ensure_single_instance():
@@ -327,39 +328,30 @@ class OptimizationBot:
             
         logger.info(f"Попытка инициализации API клиента с ключом длиной {len(api_key_to_use) if api_key_to_use else 0} символов")
         
-        # Универсальная инициализация клиента Anthropic для поддержки разных версий
+        # Универсальная инициализация клиента Anthropic
         try:
-            # Для версии 0.3.x-0.5.x
-            self.client = anthropic.Client(api_key=api_key_to_use)
-            self.client_method = "completion"
-            logger.info("Используется клиент Anthropic версии 0.3.x-0.5.x")
-        except (TypeError, AttributeError) as e1:
-            logger.warning(f"Ошибка при инициализации старого клиента: {e1}")
-            try:
-                # Попробуем без префикса sk- для новых версий API
-                self.client = anthropic.Client(api_key=api_key)
+            # Проверяем версию библиотеки anthropic
+            import pkg_resources
+            anthropic_version = pkg_resources.get_distribution("anthropic").version
+            logger.info(f"Обнаружена версия библиотеки anthropic: {anthropic_version}")
+            
+            # Для версии >= 0.51.0 (новый API)
+            if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) >= 10 or anthropic_version.startswith("0.6") or anthropic_version.startswith("0.7"):
+                logger.info("Используется клиент Anthropic версии >= 0.51.0 (новый API)")
+                self.client = anthropic.Anthropic(api_key=api_key_to_use)
+                self.client_method = "messages.create"
+            else:
+                # Для версии 0.3.x-0.5.9 (старый API)
+                logger.info("Используется клиент Anthropic версии <= 0.5.9 (старый API)")
+                self.client = anthropic.Client(api_key=api_key_to_use)
                 self.client_method = "completion"
-                logger.info("Используется клиент Anthropic версии 0.3.x-0.5.x (без префикса)")
-            except Exception as e2:
-                logger.warning(f"Ошибка при инициализации старого клиента без префикса: {e2}")
-                try:
-                    # Для версии >= 0.6.x
-                    self.client = anthropic.Anthropic(api_key=api_key_to_use)
-                    self.client_method = "messages.create"
-                    logger.info("Используется клиент Anthropic версии >= 0.6.x")
-                except Exception as e3:
-                    logger.error(f"Ошибка при инициализации нового клиента: {e3}")
-                    try:
-                        # Для версии >= 0.6.x без префикса
-                        self.client = anthropic.Anthropic(api_key=api_key)
-                        self.client_method = "messages.create"
-                        logger.info("Используется клиент Anthropic версии >= 0.6.x (без префикса)")
-                    except Exception as e4:
-                        logger.error(f"Все попытки инициализации клиента Anthropic завершились ошибкой: {e4}")
-                        # Fallback - используем заглушку
-                        self.client = None
-                        self.client_method = None
-                        logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации клиента Anthropic: {e}")
+            # Fallback - используем заглушку
+            self.client = None
+            self.client_method = None
+            logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
                 
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     
@@ -402,30 +394,72 @@ class OptimizationBot:
                 
                 # Отправляем запрос в зависимости от версии клиента
                 if self.client_method == "completion":
-                    # Старый API (версии 0.3.x-0.5.x)
-                    response = await asyncio.to_thread(
-                        self.client.completion,
-                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                        model="claude-2",
-                        max_tokens_to_sample=4000,
-                        temperature=0.7
-                    )
-                    response_text = response.completion
+                    # Старый API (версии <= 0.5.9)
+                    try:
+                        response = await asyncio.to_thread(
+                            self.client.completion,
+                            prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                            model="claude-2",
+                            max_tokens_to_sample=4000,
+                            temperature=0.7
+                        )
+                        response_text = response.completion
+                    except Exception as old_api_error:
+                        logger.error(f"Ошибка при использовании старого API: {old_api_error}")
+                        # Попробуем прямой вызов функции без await
+                        response = self.client.completion(
+                            prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                            model="claude-2",
+                            max_tokens_to_sample=4000,
+                            temperature=0.7
+                        )
+                        response_text = response.completion
                 else:
-                    # Новый API (версии >= 0.6.x)
-                    messages = [
-                        {
-                            "role": "user", 
-                            "content": enhanced_prompt
-                        }
-                    ]
-                    response = await asyncio.to_thread(
-                        self.client.messages.create,
-                        model="claude-3-opus-20240229",
-                        max_tokens=4000,
-                        messages=messages
-                    )
-                    response_text = response.content[0].text
+                    # Новый API (версии >= 0.51.0)
+                    try:
+                        # Для API v0.51.0+
+                        messages = [
+                            {
+                                "role": "user", 
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": enhanced_prompt
+                                    }
+                                ]
+                            }
+                        ]
+                        response = await asyncio.to_thread(
+                            self.client.messages.create,
+                            model="claude-3-opus-20240229",
+                            max_tokens=4000,
+                            messages=messages
+                        )
+                        response_text = response.content[0].text
+                    except Exception as new_api_error:
+                        # Резервный вызов без asyncio
+                        logger.error(f"Ошибка при использовании нового API асинхронно: {new_api_error}")
+                        try:
+                            messages = [
+                                {
+                                    "role": "user", 
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": enhanced_prompt
+                                        }
+                                    ]
+                                }
+                            ]
+                            response = self.client.messages.create(
+                                model="claude-3-opus-20240229",
+                                max_tokens=4000,
+                                messages=messages
+                            )
+                            response_text = response.content[0].text
+                        except Exception as e:
+                            logger.error(f"Ошибка при использовании нового API напрямую: {e}")
+                            raise
                 
                 logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             except Exception as api_error:
@@ -1402,30 +1436,72 @@ pause
             
             # Отправляем запрос в зависимости от версии клиента
             if self.client_method == "completion":
-                # Старый API (версии 0.3.x-0.5.x)
-                response = await asyncio.to_thread(
-                    self.client.completion,
-                    prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                    model="claude-2",
-                    max_tokens_to_sample=4000,
-                    temperature=0.7
-                )
-                response_text = response.completion
+                # Старый API (версии <= 0.5.9)
+                try:
+                    response = await asyncio.to_thread(
+                        self.client.completion,
+                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                        model="claude-2",
+                        max_tokens_to_sample=4000,
+                        temperature=0.7
+                    )
+                    response_text = response.completion
+                except Exception as old_api_error:
+                    logger.error(f"Ошибка при использовании старого API для исправления: {old_api_error}")
+                    # Попробуем прямой вызов функции без await
+                    response = self.client.completion(
+                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                        model="claude-2",
+                        max_tokens_to_sample=4000,
+                        temperature=0.7
+                    )
+                    response_text = response.completion
             else:
-                # Новый API (версии >= 0.6.x)
-                messages = [
-                    {
-                        "role": "user", 
-                        "content": enhanced_prompt
-                    }
-                ]
-                response = await asyncio.to_thread(
-                    self.client.messages.create,
-                    model="claude-3-opus-20240229",
-                    max_tokens=4000,
-                    messages=messages
-                )
-                response_text = response.content[0].text
+                # Новый API (версии >= 0.51.0)
+                try:
+                    # Для API v0.51.0+
+                    messages = [
+                        {
+                            "role": "user", 
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": enhanced_prompt
+                                }
+                            ]
+                        }
+                    ]
+                    response = await asyncio.to_thread(
+                        self.client.messages.create,
+                        model="claude-3-opus-20240229",
+                        max_tokens=4000,
+                        messages=messages
+                    )
+                    response_text = response.content[0].text
+                except Exception as new_api_error:
+                    # Резервный вызов без asyncio
+                    logger.error(f"Ошибка при использовании нового API асинхронно для исправления: {new_api_error}")
+                    try:
+                        messages = [
+                            {
+                                "role": "user", 
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": enhanced_prompt
+                                    }
+                                ]
+                            }
+                        ]
+                        response = self.client.messages.create(
+                            model="claude-3-opus-20240229",
+                            max_tokens=4000,
+                            messages=messages
+                        )
+                        response_text = response.content[0].text
+                    except Exception as e:
+                        logger.error(f"Ошибка при использовании нового API напрямую для исправления: {e}")
+                        raise
             
             logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             
