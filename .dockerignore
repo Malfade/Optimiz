@@ -1,0 +1,52 @@
+# Git
+.git
+.github
+.gitignore
+
+# Документация и тесты
+README.md
+SECURITY.md
+TROUBLESHOOTING.md
+DEPLOY_RAILWAY.md
+tests/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Временные файлы
+*.tmp
+*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# Окружение и конфиденциальные данные
+.env
+!example.env
+venv/
+env/
+ENV/
+
+# Скрипты локального запуска
+run_bot.bat
+run_bot.ps1
+
+# Кэш и логи
+logs/
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Архивы и сжатые файлы
+*.zip
+*.rar
+*.gz
+*.tar
+*.tgz
+
+# Специфичные для проекта
+*WindowsOptimizer_*.zip
+test_outputs/
+user_data/
+test_images/ 

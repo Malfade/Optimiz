@@ -1,0 +1,216 @@
+{
+    "total_scripts_generated": 17,
+    "total_errors_found": 77,
+    "total_errors_fixed": 0,
+    "error_types": {
+        "ps_syntax": 17,
+        "file_access": 14,
+        "other": 8,
+        "bat_syntax": 5,
+        "?:function\\s+Backup-Settings|# Создание резервной копии": 2,
+        "?:before|if": 1,
+        "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 8,
+        "?:Show-Menu|Display": 11,
+        "?:not\\s+exist|exist": 7,
+        "?:-ErrorAction SilentlyContinue|Select-Object": 4
+    },
+    "error_trends": [
+        {
+            "timestamp": "2025-05-11T18:13:17.768989",
+            "model": "claude-3-5-sonnet-20240620",
+            "errors_found": 15,
+            "errors_fixed": 0,
+            "error_types": {
+                "ps_syntax": 10,
+                "file_access": 1,
+                "other": 3,
+                "bat_syntax": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-11T18:19:21.753956",
+            "model": "claude-3-5-sonnet-20240620",
+            "errors_found": 12,
+            "errors_fixed": 0,
+            "error_types": {
+                "ps_syntax": 7,
+                "file_access": 1,
+                "other": 3,
+                "bat_syntax": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-11T18:23:09.714270",
+            "model": "claude-3-5-sonnet-20240620",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:function\\s+Backup-Settings|# Создание резервной копии": 1,
+                "bat_syntax": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-11T18:25:56.878865",
+            "model": "claude-3-5-sonnet-20240620",
+            "errors_found": 3,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:before|if": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии": 1,
+                "other": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T20:48:26.454360",
+            "model": "unknown",
+            "errors_found": 10,
+            "errors_fixed": 0,
+            "error_types": {
+                "file_access": 8,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1,
+                "bat_syntax": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T21:17:55.693849",
+            "model": "unknown",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 1,
+                "?:not\\s+exist|exist": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T21:23:32.452009",
+            "model": "unknown",
+            "errors_found": 5,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 2,
+                "?:not\\s+exist|exist": 1,
+                "?:-ErrorAction SilentlyContinue|Select-Object": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T21:28:22.472275",
+            "model": "unknown",
+            "errors_found": 5,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 2,
+                "?:not\\s+exist|exist": 1,
+                "?:-ErrorAction SilentlyContinue|Select-Object": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T21:36:41.987362",
+            "model": "unknown",
+            "errors_found": 5,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 2,
+                "?:not\\s+exist|exist": 1,
+                "?:-ErrorAction SilentlyContinue|Select-Object": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-12T21:44:12.030948",
+            "model": "unknown",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 1,
+                "?:not\\s+exist|exist": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T20:19:32.078233",
+            "model": "unknown",
+            "errors_found": 1,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T20:47:43.363826",
+            "model": "unknown",
+            "errors_found": 1,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T20:56:03.966672",
+            "model": "unknown",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "file_access": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T21:04:29.272057",
+            "model": "unknown",
+            "errors_found": 5,
+            "errors_fixed": 0,
+            "error_types": {
+                "file_access": 3,
+                "?:-ErrorAction SilentlyContinue|Select-Object": 1,
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T21:10:39.501718",
+            "model": "unknown",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 1,
+                "?:not\\s+exist|exist": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-13T21:15:43.241887",
+            "model": "unknown",
+            "errors_found": 2,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:Show-Menu|Display": 1,
+                "?:not\\s+exist|exist": 1
+            }
+        },
+        {
+            "timestamp": "2025-05-14T20:37:47.661559",
+            "model": "unknown",
+            "errors_found": 3,
+            "errors_fixed": 0,
+            "error_types": {
+                "?:function\\s+Backup-Settings|# Создание резервной копии|# Back": 1,
+                "bat_syntax": 1,
+                "other": 1
+            }
+        }
+    ],
+    "model_performance": {
+        "claude-3-5-sonnet-20240620": {
+            "total_scripts": 4,
+            "total_errors": 32,
+            "total_fixed": 0,
+            "average_errors_per_script": 8.0
+        },
+        "unknown": {
+            "total_scripts": 13,
+            "total_errors": 45,
+            "total_fixed": 0,
+            "average_errors_per_script": 3.4615384615384617
+        }
+    },
+    "last_updated": "2025-05-14T20:37:47.661582"
+}

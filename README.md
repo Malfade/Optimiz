@@ -111,3 +111,5 @@ python optimization_bot.py
    - Все изменения фиксируются в логах, расположенных в `%USERPROFILE%\WindowsOptimizer_Logs`
    - Для откатов оптимизаций можно использовать точки восстановления системы
    - Резервные копии создаются в папке `%USERPROFILE%\WindowsOptimizer_Backups` 
+
+   убейте меня
