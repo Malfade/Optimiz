@@ -5,6 +5,8 @@
   "deploy": {
     "startCommand": "python optimization_bot.py",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyMaxRetries": 5,
+    "restartPolicyBackoffSeconds": 30,
+    "numInstances": 1
   }
 }

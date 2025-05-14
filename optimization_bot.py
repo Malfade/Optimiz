@@ -1803,14 +1803,33 @@ def main():
         total_errors = error_stats["total_errors"]
         logger.info(f"Обнаружено ошибок: {total_errors}")
         
+        # Специальная проверка для Railway
+        # Простая обработка конфликта экземпляров
+        try:
+            bot.get_me()  # Проверяем подключение к Telegram API
+            logger.info("Соединение с Telegram API установлено успешно")
+        except telebot.apihelper.ApiTelegramException as e:
+            if "Conflict" in str(e) and "terminated by other getUpdates request" in str(e):
+                logger.error("Обнаружен конфликт с другим экземпляром бота. Завершение работы...")
+                return  # Завершаем работу этого экземпляра
+            raise
+            
         # Запуск бота с обработкой ошибок и таймаутами
         while True:
             try:
                 logger.info("Запускаем бота с обработкой ошибок...")
-                bot.polling(none_stop=True, interval=3, timeout=60)
+                bot.polling(none_stop=False, interval=5, timeout=60)
+                logger.info("Бот остановлен")
+                time.sleep(15)  # Короткая пауза
+            except telebot.apihelper.ApiTelegramException as e:
+                if "Conflict" in str(e) and "terminated by other getUpdates request" in str(e):
+                    logger.error("Конфликт с другим экземпляром бота. Завершение работы...")
+                    return  # Завершаем работу при конфликте
+                logger.error(f"Ошибка API Telegram: {e}")
+                time.sleep(30)  # Увеличенная пауза при ошибках API
             except Exception as e:
                 logger.error(f"Ошибка в polling: {e}")
-                time.sleep(15)  # Пауза перед повторной попыткой
+                time.sleep(30)  # Более длительная пауза при других ошибках
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
 
