@@ -316,7 +316,7 @@ class OptimizationBot:
         self.validator = validator or ScriptValidator()
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
-        self.client = anthropic.Anthropic(api_key=api_key, proxies=None)
+        self.client = anthropic.Anthropic(api_key=api_key)
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     
     async def generate_new_script(self, message):
@@ -346,29 +346,21 @@ class OptimizationBot:
             # Используем оптимизированный промпт, если он доступен
             prompt = self.prompts.get("OPTIMIZATION_PROMPT_TEMPLATE", OPTIMIZATION_PROMPT_TEMPLATE)
             
-            messages = [
-                {
-                    "role": "user", 
-                    "content": [
-                        {"type": "text", "text": prompt + "\n\n" + user_message},
-                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_base64}}
-                    ]
-                }
-            ]
-            
-            logger.info("Отправляю запрос к Claude API...")
+            # В старой версии API нет поддержки изображений, поэтому добавляем текстовое описание
+            enhanced_prompt = f"{prompt}\n\n{user_message}\n\nЯ отправил скриншот со сведениями о системе. Создай скрипты оптимизации для Windows, основываясь на общих принципах оптимизации."
             
             try:
                 # Отправляем запрос к Claude
                 response = await asyncio.to_thread(
-                    self.client.messages.create,
-                    model="claude-3-opus-20240229",
-                    max_tokens=4000,
-                    messages=messages
+                    self.client.completion,
+                    prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                    model="claude-2",
+                    max_tokens_to_sample=4000,
+                    temperature=0.7
                 )
                 
                 # Обрабатываем ответ
-                response_text = response.content[0].text
+                response_text = response.completion
                 
                 logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             except Exception as api_error:
@@ -1334,28 +1326,22 @@ pause
             # Используем оптимизированный промпт исправления ошибок
             prompt = self.prompts.get("ERROR_FIX_PROMPT_TEMPLATE", ERROR_FIX_PROMPT_TEMPLATE)
             
-            messages = [
-                {
-                    "role": "user", 
-                    "content": [
-                        {"type": "text", "text": prompt + "\n\n" + user_message},
-                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_base64}}
-                    ]
-                }
-            ]
+            # В старой версии API нет поддержки изображений, поэтому добавляем текстовое описание
+            enhanced_prompt = f"{prompt}\n\n{user_message}\n\nЯ отправил скриншот с ошибками в скрипте. Исправь основные проблемы, которые обычно возникают в PowerShell скриптах."
             
             logger.info("Отправляю запрос к Claude API для исправления ошибок...")
             
             # Отправляем запрос к Claude
             response = await asyncio.to_thread(
-                self.client.messages.create,
-                model="claude-3-opus-20240229",
-                max_tokens=4000,
-                messages=messages
+                self.client.completion,
+                prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                model="claude-2",
+                max_tokens_to_sample=4000,
+                temperature=0.7
             )
             
             # Обрабатываем ответ
-            response_text = response.content[0].text
+            response_text = response.completion
             
             logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             
@@ -1817,12 +1803,14 @@ def main():
         total_errors = error_stats["total_errors"]
         logger.info(f"Обнаружено ошибок: {total_errors}")
         
-        # Запуск бота
-        try:
-            bot.polling(none_stop=True, interval=1, timeout=30)
-        except Exception as e:
-            logger.error(f"Ошибка в методе polling: {e}")
-            time.sleep(10)  # Пауза перед повторной попыткой
+        # Запуск бота с обработкой ошибок и таймаутами
+        while True:
+            try:
+                logger.info("Запускаем бота с обработкой ошибок...")
+                bot.polling(none_stop=True, interval=3, timeout=60)
+            except Exception as e:
+                logger.error(f"Ошибка в polling: {e}")
+                time.sleep(15)  # Пауза перед повторной попыткой
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
 
