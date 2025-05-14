@@ -318,33 +318,32 @@ class OptimizationBot:
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
         
-        # Проверка и коррекция API ключа
-        if api_key and not api_key.startswith("sk-"):
-            # Если ключ не имеет префикса, попробуем добавить его
-            api_key_to_use = f"sk-{api_key}"
-            logger.info("API ключ не содержит префикс 'sk-', добавляем его автоматически")
-        else:
-            api_key_to_use = api_key
-            
-        logger.info(f"Попытка инициализации API клиента с ключом длиной {len(api_key_to_use) if api_key_to_use else 0} символов")
-        
-        # Универсальная инициализация клиента Anthropic
+        # Используем вспомогательный модуль для работы с API
         try:
-            # Проверяем версию библиотеки anthropic
-            import pkg_resources
-            anthropic_version = pkg_resources.get_distribution("anthropic").version
-            logger.info(f"Обнаружена версия библиотеки anthropic: {anthropic_version}")
+            # Импортируем вспомогательный модуль
+            from anthropic_helper import get_api_key_with_prefix, create_anthropic_client
             
-            # Для версии >= 0.51.0 (новый API)
-            if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) >= 10 or anthropic_version.startswith("0.6") or anthropic_version.startswith("0.7"):
-                logger.info("Используется клиент Anthropic версии >= 0.51.0 (новый API)")
-                self.client = anthropic.Anthropic(api_key=api_key_to_use)
-                self.client_method = "messages.create"
+            # Если ключ не был передан, берем из переменной окружения через вспомогательную функцию
+            if not api_key or api_key == "dummy_key":
+                api_key = get_api_key_with_prefix()
+                if api_key:
+                    self.api_key = api_key
+                    logger.info(f"API ключ получен из переменных окружения (длина: {len(api_key)})")
+            
+            # Инициализируем клиент асинхронно через временную функцию
+            async def init_client():
+                return await create_anthropic_client()
+            
+            client, method, error = asyncio.run(init_client())
+            
+            if error:
+                logger.error(f"Ошибка инициализации клиента: {error}")
+                self.client = None
+                self.client_method = None
             else:
-                # Для версии 0.3.x-0.5.9 (старый API)
-                logger.info("Используется клиент Anthropic версии <= 0.5.9 (старый API)")
-                self.client = anthropic.Client(api_key=api_key_to_use)
-                self.client_method = "completion"
+                self.client = client
+                self.client_method = method
+                logger.info(f"Клиент успешно инициализирован, используя метод: {method}")
                 
         except Exception as e:
             logger.error(f"Ошибка при инициализации клиента Anthropic: {e}")
@@ -438,7 +437,33 @@ class OptimizationBot:
                         response_text = response.content[0].text
                     except Exception as new_api_error:
                         # Резервный вызов без asyncio
+                        error_str = str(new_api_error)
                         logger.error(f"Ошибка при использовании нового API асинхронно: {new_api_error}")
+                        
+                        if "invalid x-api-key" in error_str or "authentication_error" in error_str:
+                            # Отправляем сообщение об ошибке аутентификации
+                            bot.send_message(message.chat.id, 
+                                             "⚠️ Обнаружена проблема с API ключом.\n\n"
+                                             "Пожалуйста, получите новый ключ API на сайте Anthropic и настройте его в файле .env.\n"
+                                             "Пока что будут использоваться шаблонные скрипты.")
+                            
+                            # Переходим к использованию шаблонных скриптов
+                            files = self._get_template_scripts()
+                            # Проверяем и улучшаем шаблонные скрипты
+                            fixed_files, validation_results, errors_corrected = validate_and_fix_scripts(files)
+                            # Обновляем статистику
+                            self.metrics.record_script_generation({
+                                "timestamp": datetime.now().isoformat(),
+                                "errors": validation_results,
+                                "error_count": sum(len(issues) for issues in validation_results.values()),
+                                "fixed_count": errors_corrected,
+                                "model": "template_fallback",
+                                "api_error": True
+                            })
+                            # Сохраняем файлы для последующей отправки
+                            user_files[message.chat.id] = fixed_files
+                            return fixed_files
+                            
                         try:
                             messages = [
                                 {
@@ -1480,7 +1505,18 @@ pause
                     response_text = response.content[0].text
                 except Exception as new_api_error:
                     # Резервный вызов без asyncio
+                    error_str = str(new_api_error)
                     logger.error(f"Ошибка при использовании нового API асинхронно для исправления: {new_api_error}")
+                    
+                    if "invalid x-api-key" in error_str or "authentication_error" in error_str:
+                        # Отправляем сообщение об ошибке аутентификации
+                        bot.send_message(message.chat.id, 
+                                         "⚠️ Обнаружена проблема с API ключом.\n\n"
+                                         "Пожалуйста, получите новый ключ API на сайте Anthropic и настройте его в файле .env.")
+                        # Используем альтернативный подход с шаблонами
+                        files = self._get_template_scripts()
+                        return files
+                    
                     try:
                         messages = [
                             {
