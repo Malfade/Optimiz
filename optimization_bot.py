@@ -316,7 +316,26 @@ class OptimizationBot:
         self.validator = validator or ScriptValidator()
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
-        self.client = anthropic.Anthropic(api_key=api_key)
+        
+        # Универсальная инициализация клиента Anthropic для поддержки разных версий
+        try:
+            # Для версии 0.3.x-0.5.x
+            self.client = anthropic.Client(api_key=api_key)
+            self.client_method = "completion"
+            logger.info("Используется клиент Anthropic версии 0.3.x-0.5.x")
+        except (TypeError, AttributeError):
+            try:
+                # Для версии >= 0.6.x
+                self.client = anthropic.Anthropic(api_key=api_key)
+                self.client_method = "messages.create"
+                logger.info("Используется клиент Anthropic версии >= 0.6.x")
+            except Exception as e:
+                logger.error(f"Ошибка при инициализации клиента Anthropic: {e}")
+                # Fallback - используем заглушку
+                self.client = None
+                self.client_method = None
+                logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
+                
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     
     async def generate_new_script(self, message):
@@ -346,21 +365,42 @@ class OptimizationBot:
             # Используем оптимизированный промпт, если он доступен
             prompt = self.prompts.get("OPTIMIZATION_PROMPT_TEMPLATE", OPTIMIZATION_PROMPT_TEMPLATE)
             
-            # В старой версии API нет поддержки изображений, поэтому добавляем текстовое описание
-            enhanced_prompt = f"{prompt}\n\n{user_message}\n\nЯ отправил скриншот со сведениями о системе. Создай скрипты оптимизации для Windows, основываясь на общих принципах оптимизации."
+            # Подготовка текста промпта
+            enhanced_prompt = f"{prompt}\n\n{user_message}\n\nЯ отправил скриншот со сведениями о системе. Создай скрипты оптимизации для Windows."
             
             try:
-                # Отправляем запрос к Claude
-                response = await asyncio.to_thread(
-                    self.client.completion,
-                    prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                    model="claude-2",
-                    max_tokens_to_sample=4000,
-                    temperature=0.7
-                )
+                # Проверяем, инициализирован ли клиент API
+                if self.client is None:
+                    raise Exception("API клиент не инициализирован. Используем шаблонные скрипты.")
                 
-                # Обрабатываем ответ
-                response_text = response.completion
+                logger.info("Отправляю запрос к Claude API...")
+                
+                # Отправляем запрос в зависимости от версии клиента
+                if self.client_method == "completion":
+                    # Старый API (версии 0.3.x-0.5.x)
+                    response = await asyncio.to_thread(
+                        self.client.completion,
+                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                        model="claude-2",
+                        max_tokens_to_sample=4000,
+                        temperature=0.7
+                    )
+                    response_text = response.completion
+                else:
+                    # Новый API (версии >= 0.6.x)
+                    messages = [
+                        {
+                            "role": "user", 
+                            "content": enhanced_prompt
+                        }
+                    ]
+                    response = await asyncio.to_thread(
+                        self.client.messages.create,
+                        model="claude-3-opus-20240229",
+                        max_tokens=4000,
+                        messages=messages
+                    )
+                    response_text = response.content[0].text
                 
                 logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             except Exception as api_error:
@@ -1326,22 +1366,41 @@ pause
             # Используем оптимизированный промпт исправления ошибок
             prompt = self.prompts.get("ERROR_FIX_PROMPT_TEMPLATE", ERROR_FIX_PROMPT_TEMPLATE)
             
-            # В старой версии API нет поддержки изображений, поэтому добавляем текстовое описание
+            # Подготовка текста промпта
             enhanced_prompt = f"{prompt}\n\n{user_message}\n\nЯ отправил скриншот с ошибками в скрипте. Исправь основные проблемы, которые обычно возникают в PowerShell скриптах."
             
             logger.info("Отправляю запрос к Claude API для исправления ошибок...")
             
-            # Отправляем запрос к Claude
-            response = await asyncio.to_thread(
-                self.client.completion,
-                prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                model="claude-2",
-                max_tokens_to_sample=4000,
-                temperature=0.7
-            )
+            # Проверяем, инициализирован ли клиент API
+            if self.client is None:
+                raise Exception("API клиент не инициализирован. Используем шаблонные скрипты.")
             
-            # Обрабатываем ответ
-            response_text = response.completion
+            # Отправляем запрос в зависимости от версии клиента
+            if self.client_method == "completion":
+                # Старый API (версии 0.3.x-0.5.x)
+                response = await asyncio.to_thread(
+                    self.client.completion,
+                    prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                    model="claude-2",
+                    max_tokens_to_sample=4000,
+                    temperature=0.7
+                )
+                response_text = response.completion
+            else:
+                # Новый API (версии >= 0.6.x)
+                messages = [
+                    {
+                        "role": "user", 
+                        "content": enhanced_prompt
+                    }
+                ]
+                response = await asyncio.to_thread(
+                    self.client.messages.create,
+                    model="claude-3-opus-20240229",
+                    max_tokens=4000,
+                    messages=messages
+                )
+                response_text = response.content[0].text
             
             logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
             
@@ -1646,11 +1705,33 @@ def process_photo(message):
             parse_mode='Markdown'
         )
         
-        # Создаем экземпляр OptimizationBot с API ключом
-        optimization_bot = OptimizationBot(ANTHROPIC_API_KEY)
-        
-        # Запускаем процесс генерации скрипта асинхронно через asyncio.run
-        results = asyncio.run(optimization_bot.generate_new_script(message))
+        try:
+            # Создаем экземпляр OptimizationBot с API ключом
+            optimization_bot = OptimizationBot(ANTHROPIC_API_KEY)
+            
+            # Запускаем процесс генерации скрипта асинхронно через asyncio.run
+            results = asyncio.run(optimization_bot.generate_new_script(message))
+        except Exception as init_error:
+            logger.error(f"Ошибка при инициализации оптимизатора: {init_error}")
+            
+            # Создаем базовые шаблонные скрипты
+            try:
+                # Создаем простой экземпляр без API
+                fallback_bot = OptimizationBot("dummy_key")
+                # Используем шаблонные скрипты вместо генерации
+                results = fallback_bot._get_template_scripts()
+                bot.send_message(
+                    message.chat.id,
+                    "⚠️ Возникла проблема с API. Использую шаблонные скрипты вместо генерации новых.",
+                )
+            except Exception as fallback_error:
+                logger.error(f"Ошибка при создании шаблонных скриптов: {fallback_error}")
+                bot.send_message(
+                    message.chat.id,
+                    "❌ Возникла критическая ошибка. Пожалуйста, попробуйте позже.",
+                )
+                user_states[message.chat.id] = "main_menu"
+                return
         
         if isinstance(results, dict):  # Сгенерированы файлы скриптов
             # Сохраняем файлы для дальнейшего доступа
@@ -1662,10 +1743,14 @@ def process_photo(message):
                 logger.info(f"Скрипты успешно отправлены пользователю {user_id}")
             except Exception as send_error:
                 logger.error(f"Ошибка при отправке файлов: {send_error}")
-                bot.send_message(
-                    message.chat.id, 
-                    "❌ Произошла ошибка при отправке файлов. Пожалуйста, попробуйте еще раз."
-                )
+                # Попытка использовать fallback_bot если optimization_bot недоступен
+                try:
+                    asyncio.run(fallback_bot.send_script_files_to_user(message.chat.id, results))
+                except Exception:
+                    bot.send_message(
+                        message.chat.id, 
+                        "❌ Произошла ошибка при отправке файлов. Пожалуйста, попробуйте еще раз."
+                    )
         else:  # Получено сообщение об ошибке
             logger.error(f"Ошибка при генерации скрипта: {results}")
             bot.send_message(message.chat.id, results)
