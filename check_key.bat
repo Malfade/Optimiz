@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title Обновление API ключа Anthropic
+title Проверка API ключа Anthropic
 
 echo =================================================
-echo Утилита обновления API ключа Anthropic
+echo Утилита проверки API ключа Anthropic
 echo =================================================
 
-python get_new_key.py
+python check_anthropic_key.py
 
 pause 
