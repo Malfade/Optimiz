@@ -5,7 +5,7 @@
   },
   "deploy": {
     "numInstances": 1,
-    "startCommand": "python fix_railway_env.py && python auto_key_fix.py && python check_anthropic_key.py && python optimization_bot.py",
+    "startCommand": "python debug_proxies.py && python patch_before_import.py && python fix_railway_env.py && python auto_key_fix.py && python check_anthropic_key.py && python optimization_bot.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5,
     "restartPolicyBackoffSeconds": 30
