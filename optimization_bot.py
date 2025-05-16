@@ -317,40 +317,6 @@ class OptimizationBot:
         self.validator = validator or ScriptValidator()
         self.metrics = ScriptMetrics()
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
-        
-        # Используем вспомогательный модуль для работы с API
-        try:
-            # Импортируем вспомогательный модуль
-            from anthropic_helper import get_api_key_with_prefix, create_anthropic_client
-            
-            # Если ключ не был передан, берем из переменной окружения через вспомогательную функцию
-            if not api_key or api_key == "dummy_key":
-                api_key = get_api_key_with_prefix()
-                if api_key:
-                    self.api_key = api_key
-                    logger.info(f"API ключ получен из переменных окружения (длина: {len(api_key)})")
-            
-            # Инициализируем клиент асинхронно через временную функцию
-            async def init_client():
-                return await create_anthropic_client()
-            
-            client, method, error = asyncio.run(init_client())
-            
-            if error:
-                logger.error(f"Ошибка инициализации клиента: {error}")
-                self.client = None
-                self.client_method = None
-            else:
-                self.client = client
-                self.client_method = method
-                logger.info(f"Клиент успешно инициализирован, используя метод: {method}")
-                
-        except Exception as e:
-            logger.error(f"Ошибка при инициализации клиента Anthropic: {e}")
-            # Fallback - используем заглушку
-            self.client = None
-            self.client_method = None
-            logger.error("Используется заглушка для API (будут использоваться только шаблонные скрипты)")
                 
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
     
