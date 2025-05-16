@@ -319,6 +319,28 @@ class OptimizationBot:
         self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
                 
         self.prompts = self.prompt_optimizer.get_optimized_prompts()
+        
+        # Инициализация API клиента
+        try:
+            # Определяем версию API
+            anthropic_version = pkg_resources.get_distribution("anthropic").version
+            logger.info(f"Используем версию Anthropic API: {anthropic_version}")
+            
+            # Инициализируем клиент в зависимости от версии
+            if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
+                # Старый API (версии <= 0.5.9)
+                self.client = anthropic.Client(api_key=api_key)
+                self.client_method = "completion"
+                logger.info("Инициализирован клиент API (старая версия)")
+            else:
+                # Новый API (версии >= 0.51.0)
+                self.client = anthropic.Anthropic(api_key=api_key)
+                self.client_method = "messages"
+                logger.info("Инициализирован клиент API (новая версия)")
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации API клиента: {e}")
+            self.client = None
+            self.client_method = None
     
     async def generate_new_script(self, message):
         """Генерация нового скрипта оптимизации на основе скриншота системы"""
@@ -1423,67 +1445,37 @@ pause
             
             # Проверяем, инициализирован ли клиент API
             if self.client is None:
-                raise Exception("API клиент не инициализирован. Используем шаблонные скрипты.")
+                logger.warning("API клиент не инициализирован. Используем шаблонные скрипты.")
+                files = self._get_template_scripts()
+                return files
             
-            # Отправляем запрос в зависимости от версии клиента
-            if self.client_method == "completion":
-                # Старый API (версии <= 0.5.9)
-                try:
-                    response = await asyncio.to_thread(
-                        self.client.completion,
-                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                        model="claude-2",
-                        max_tokens_to_sample=4000,
-                        temperature=0.7
-                    )
-                    response_text = response.completion
-                except Exception as old_api_error:
-                    logger.error(f"Ошибка при использовании старого API для исправления: {old_api_error}")
-                    # Попробуем прямой вызов функции без await
-                    response = self.client.completion(
-                        prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
-                        model="claude-2",
-                        max_tokens_to_sample=4000,
-                        temperature=0.7
-                    )
-                    response_text = response.completion
-            else:
-                # Новый API (версии >= 0.51.0)
-                try:
-                    # Для API v0.51.0+
-                    messages = [
-                        {
-                            "role": "user", 
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": enhanced_prompt
-                                }
-                            ]
-                        }
-                    ]
-                    response = await asyncio.to_thread(
-                        self.client.messages.create,
-                        model="claude-3-opus-20240229",
-                        max_tokens=4000,
-                        messages=messages
-                    )
-                    response_text = response.content[0].text
-                except Exception as new_api_error:
-                    # Резервный вызов без asyncio
-                    error_str = str(new_api_error)
-                    logger.error(f"Ошибка при использовании нового API асинхронно для исправления: {new_api_error}")
-                    
-                    if "invalid x-api-key" in error_str or "authentication_error" in error_str:
-                        # Отправляем сообщение об ошибке аутентификации
-                        bot.send_message(message.chat.id, 
-                                         "⚠️ Обнаружена проблема с API ключом.\n\n"
-                                         "Пожалуйста, получите новый ключ API на сайте Anthropic и настройте его в файле .env.")
-                        # Используем альтернативный подход с шаблонами
-                        files = self._get_template_scripts()
-                        return files
-                    
+            try:
+                # Отправляем запрос в зависимости от версии клиента
+                if self.client_method == "completion":
+                    # Старый API (версии <= 0.5.9)
                     try:
+                        response = await asyncio.to_thread(
+                            self.client.completion,
+                            prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                            model="claude-2",
+                            max_tokens_to_sample=4000,
+                            temperature=0.7
+                        )
+                        response_text = response.completion
+                    except Exception as old_api_error:
+                        logger.error(f"Ошибка при использовании старого API для исправления: {old_api_error}")
+                        # Попробуем прямой вызов функции без await
+                        response = self.client.completion(
+                            prompt=f"\n\nHuman: {enhanced_prompt}\n\nAssistant:",
+                            model="claude-2",
+                            max_tokens_to_sample=4000,
+                            temperature=0.7
+                        )
+                        response_text = response.completion
+                else:
+                    # Новый API (версии >= 0.51.0)
+                    try:
+                        # Для API v0.51.0+
                         messages = [
                             {
                                 "role": "user", 
@@ -1495,24 +1487,74 @@ pause
                                 ]
                             }
                         ]
-                        response = self.client.messages.create(
+                        response = await asyncio.to_thread(
+                            self.client.messages.create,
                             model="claude-3-opus-20240229",
                             max_tokens=4000,
                             messages=messages
                         )
                         response_text = response.content[0].text
-                    except Exception as e:
-                        logger.error(f"Ошибка при использовании нового API напрямую для исправления: {e}")
-                        raise
-            
-            logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
+                    except Exception as new_api_error:
+                        # Резервный вызов без asyncio
+                        error_str = str(new_api_error)
+                        logger.error(f"Ошибка при использовании нового API асинхронно для исправления: {new_api_error}")
+                        
+                        if "invalid x-api-key" in error_str or "authentication_error" in error_str:
+                            # Отправляем сообщение об ошибке аутентификации
+                            bot.send_message(message.chat.id, 
+                                            "⚠️ Обнаружена проблема с API ключом.\n\n"
+                                            "Пожалуйста, получите новый ключ API на сайте Anthropic и настройте его в файле .env.")
+                            # Используем альтернативный подход с шаблонами
+                            files = self._get_template_scripts()
+                            return files
+                        
+                        try:
+                            messages = [
+                                {
+                                    "role": "user", 
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": enhanced_prompt
+                                        }
+                                    ]
+                                }
+                            ]
+                            response = self.client.messages.create(
+                                model="claude-3-opus-20240229",
+                                max_tokens=4000,
+                                messages=messages
+                            )
+                            response_text = response.content[0].text
+                        except Exception as e:
+                            logger.error(f"Ошибка при использовании нового API напрямую для исправления: {e}")
+                            raise
+                
+                logger.info(f"Получен ответ от Claude API, длина: {len(response_text)} символов")
+            except Exception as api_error:
+                # Проверяем ошибку баланса API
+                error_str = str(api_error)
+                if "credit balance is too low" in error_str or "Your credit balance is too low" in error_str:
+                    logger.error(f"Ошибка недостаточного баланса API: {api_error}")
+                    error_message = "К сожалению, баланс API-кредитов исчерпан. Пожалуйста, обратитесь к администратору для пополнения баланса."
+                    bot.send_message(message.chat.id, error_message)
+                    
+                    # Используем альтернативный подход с шаблонами
+                    files = self._get_template_scripts()
+                    return files
+                else:
+                    # Другая ошибка API - используем шаблонные скрипты
+                    logger.error(f"Ошибка API при исправлении скрипта: {api_error}")
+                    files = self._get_template_scripts()
+                    return files
             
             # Извлекаем файлы из ответа
             files = self.extract_files(response_text)
             
             if not files:
                 logger.warning("Не удалось извлечь исправленные файлы из ответа API")
-                return "Не удалось исправить ошибки в скриптах. Пожалуйста, попробуйте еще раз или отправьте другое изображение."
+                files = self._get_template_scripts()
+                return files
             
             # Дополнительная проверка и исправление скриптов
             fixed_files, validation_results, errors_corrected = validate_and_fix_scripts(files)
@@ -1534,7 +1576,12 @@ pause
         
         except Exception as e:
             logger.error(f"Ошибка при исправлении скрипта: {e}", exc_info=True)
-            return f"Произошла ошибка при исправлении скрипта: {str(e)}"
+            # В случае критической ошибки, возвращаем шаблонные скрипты
+            try:
+                files = self._get_template_scripts()
+                return files
+            except:
+                return f"Произошла ошибка при исправлении скрипта: {str(e)}"
     
     def update_error_stats(self, validation_results):
         """
@@ -1698,17 +1745,55 @@ def process_error_photo(message):
         # Создаем экземпляр бота
         optimization_bot = OptimizationBot(ANTHROPIC_API_KEY)
         
-        # Вызываем асинхронную функцию через asyncio.run
-        result = asyncio.run(optimization_bot.fix_script_errors(message))
+        # Переменная для хранения результатов
+        result = None
+        
+        try:
+            # Вызываем асинхронную функцию через asyncio.run
+            result = asyncio.run(optimization_bot.fix_script_errors(message))
+        except Exception as api_error:
+            logger.error(f"Ошибка при исправлении скрипта: {api_error}")
+            
+            # Используем шаблонные скрипты вместо генерации
+            try:
+                result = optimization_bot._get_template_scripts()
+                
+                try:
+                    bot.edit_message_text(
+                        "⚠️ Возникла проблема при анализе ошибки. Будут предоставлены стандартные скрипты оптимизации.",
+                        message.chat.id,
+                        processing_msg.message_id
+                    )
+                except Exception as edit_error:
+                    logger.warning(f"Не удалось отредактировать сообщение: {edit_error}")
+                    bot.send_message(
+                        message.chat.id,
+                        "⚠️ Возникла проблема при анализе ошибки. Будут предоставлены стандартные скрипты оптимизации."
+                    )
+            except Exception as fallback_error:
+                logger.error(f"Ошибка при создании шаблонных скриптов: {fallback_error}")
+                bot.send_message(
+                    message.chat.id,
+                    "❌ Возникла критическая ошибка. Пожалуйста, попробуйте позже."
+                )
+                user_states[message.chat.id] = "main_menu"
+                return
         
         if isinstance(result, dict) and len(result) > 0:
             # Сообщаем об успешном исправлении
             try:
-                bot.edit_message_text(
-                    "✅ Ошибки успешно исправлены! Создаю ZIP-архив с исправленными скриптами...",
-                    message.chat.id,
-                    processing_msg.message_id
-                )
+                if "MacOptimizer.sh" in result or "WindowsOptimizer.ps1" in result:
+                    bot.edit_message_text(
+                        "✅ Создаю ZIP-архив со скриптами оптимизации...",
+                        message.chat.id,
+                        processing_msg.message_id
+                    )
+                else:
+                    bot.edit_message_text(
+                        "✅ Ошибки успешно исправлены! Создаю ZIP-архив с исправленными скриптами...",
+                        message.chat.id,
+                        processing_msg.message_id
+                    )
             except telebot.apihelper.ApiTelegramException as api_error:
                 if "message can't be edited" in str(api_error):
                     logger.warning(f"Не удалось отредактировать сообщение - сообщение не может быть отредактировано")
@@ -1728,7 +1813,14 @@ def process_error_photo(message):
                 )
             
             # Отправляем файлы пользователю
-            asyncio.run(optimization_bot.send_script_files_to_user(message.chat.id, result))
+            try:
+                asyncio.run(optimization_bot.send_script_files_to_user(message.chat.id, result))
+            except Exception as send_error:
+                logger.error(f"Ошибка при отправке файлов: {send_error}")
+                bot.send_message(
+                    message.chat.id, 
+                    "❌ Произошла ошибка при отправке файлов. Пожалуйста, попробуйте еще раз."
+                )
             
             # Возвращаем в главное меню
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
@@ -1783,6 +1875,14 @@ def process_error_photo(message):
             message.chat.id,
             f"❌ Произошла ошибка при обработке фото: {str(e)}\n\nПопробуйте отправить другой скриншот или вернитесь в главное меню с помощью команды /cancel."
         )
+        # Возвращаем в главное меню при критической ошибке
+        user_states[message.chat.id] = "main_menu"
+        # Показываем клавиатуру меню
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        btn1 = types.KeyboardButton("🔧 Создать скрипт оптимизации")
+        btn2 = types.KeyboardButton("🔨 Исправить ошибки в скрипте")
+        markup.add(btn1, btn2)
+        bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
 
 # Обработчик для скриншотов с системной информацией
 @bot.message_handler(content_types=['photo'], func=lambda message: user_states.get(message.chat.id) == "waiting_for_screenshot")
@@ -1808,21 +1908,22 @@ def process_photo(message):
             parse_mode='Markdown'
         )
         
+        # Создаем экземпляр OptimizationBot с API ключом
+        optimization_bot = OptimizationBot(ANTHROPIC_API_KEY)
+        
+        # Переменная для хранения результатов
+        results = None
+        
         try:
-            # Создаем экземпляр OptimizationBot с API ключом
-            optimization_bot = OptimizationBot(ANTHROPIC_API_KEY)
-            
             # Запускаем процесс генерации скрипта асинхронно через asyncio.run
             results = asyncio.run(optimization_bot.generate_new_script(message))
         except Exception as init_error:
-            logger.error(f"Ошибка при инициализации оптимизатора: {init_error}")
+            logger.error(f"Ошибка при генерации скрипта: {init_error}")
             
             # Создаем базовые шаблонные скрипты
             try:
-                # Создаем простой экземпляр без API
-                fallback_bot = OptimizationBot("dummy_key")
                 # Используем шаблонные скрипты вместо генерации
-                results = fallback_bot._get_template_scripts()
+                results = optimization_bot._get_template_scripts()
                 bot.send_message(
                     message.chat.id,
                     "⚠️ Возникла проблема с API. Использую шаблонные скрипты вместо генерации новых.",
@@ -1846,20 +1947,29 @@ def process_photo(message):
                 logger.info(f"Скрипты успешно отправлены пользователю {user_id}")
             except Exception as send_error:
                 logger.error(f"Ошибка при отправке файлов: {send_error}")
-                # Попытка использовать fallback_bot если optimization_bot недоступен
-                try:
-                    asyncio.run(fallback_bot.send_script_files_to_user(message.chat.id, results))
-                except Exception:
-                    bot.send_message(
-                        message.chat.id, 
-                        "❌ Произошла ошибка при отправке файлов. Пожалуйста, попробуйте еще раз."
-                    )
+                # Попытка отправить сообщение об ошибке
+                bot.send_message(
+                    message.chat.id, 
+                    "❌ Произошла ошибка при отправке файлов. Пожалуйста, попробуйте еще раз."
+                )
         else:  # Получено сообщение об ошибке
             logger.error(f"Ошибка при генерации скрипта: {results}")
             bot.send_message(message.chat.id, results)
         
         # Сбрасываем состояние пользователя на главное меню
         user_states[message.chat.id] = "main_menu"
+        
+        # Возвращаем главное меню
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        btn1 = types.KeyboardButton("🔧 Создать скрипт оптимизации")
+        btn2 = types.KeyboardButton("🔨 Исправить ошибки в скрипте")
+        markup.add(btn1, btn2)
+        
+        bot.send_message(
+            message.chat.id,
+            "Что еще вы хотите сделать?",
+            reply_markup=markup
+        )
         
     except Exception as e:
         logger.error(f"Ошибка в обработчике фото: {e}", exc_info=True)
