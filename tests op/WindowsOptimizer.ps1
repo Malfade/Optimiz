@@ -1,8 +1,26 @@
 # Encoding: UTF-8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Путь к лог-файлу
-$LogPath = "$env:TEMP\WindowsOptimizer_Log.txt"
+# Set system to use English language for output
+[System.Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US'
+[System.Threading.Thread]::CurrentThread.CurrentCulture = 'en-US'
+
+# Проверка прав администратора
+function Test-Administrator {
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($user)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if (-not (Test-Administrator)) {
+    Write-Warning "This script requires administrator privileges."
+    Write-Warning "Please run the script as administrator."
+    pause
+    exit
+}
+
+# Настройка логирования
+$LogPath = "${1}:TEMP\WindowsOptimizer_Log.txt"
 
 # Функция для записи в лог
 function Write-Log {
@@ -26,138 +44,38 @@ function Write-Log {
     # Записываем в файл лога
     $LogEntry | Out-File -FilePath $LogPath -Append -Encoding UTF8
 }
+Start-Transcript -Path $LogPath -Append -Force
+Write-Host "Logging configured. Log will be saved to: $LogPath" -ForegroundColor Green
 
-# Функция оптимизации служб Windows
-function Optimize-Services {
-    param([bool]$Revert = $false)
+# Функция для создания резервных копий настроек
+function Backup-Settings {
+    param (
+        [string]$SettingName,
+        [string]$Data
+    )
     
-    Write-Host "Оптимизация служб Windows..." -ForegroundColor Cyan
-    
-    $servicesToDisable = @("DiagTrack", "dmwappushservice", "SysMain", "XboxGipSvc", "XblAuthManager", "XblGameSave", "XboxNetApiSvc")
-    
-    foreach ($service in $servicesToDisable) {
-        $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+    try {
+        # Создаем директорию для резервных копий, если ее нет
+        $BackupDir = "${1}:USERPROFILE\WindowsOptimizer_Backups"
+        if (-not (Test-Path -Path $BackupDir)) {
+            New-Item -Path $BackupDir -ItemType Directory -Force | Out-Null
+        }
         
-        if ($svc) {
-            $currentState = $svc.StartType
-            $backupFile = "${1}:TEMP\service_${1}.bak"
-            $currentState | Out-File -FilePath $backupFile -Force
-            
-            if ($Revert) {
-                if (Test-Path $backupFile) {
-                    $originalState = Get-Content $backupFile
-                    Write-Host "Восстановление службы $service в состояние $originalState..."
-                    try {
-                        Set-Service -Name $service -StartupType $originalState -ErrorAction SilentlyContinue
-                        Write-Host "Служба $service восстановлена." -ForegroundColor Green
-                    }
-                    catch {
-                        Write-Warning "Не удалось восстановить службу ${1}: ${1}"
-                    }
-                }
-            }
-            else {
-                try {
-                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "Служба $service отключена." -ForegroundColor Green
-                }
-                catch {
-                    Write-Warning "Не удалось отключить службу ${1}: ${1}"
-                }
-            }
-        }
-        else {
-            Write-Host "Служба $service не найдена на данном компьютере." -ForegroundColor Yellow
-        }
-    }
-}
-
-# Функция оптимизации визуальных эффектов
-function Optimize-VisualEffects {
-    Write-Host "Оптимизация визуальных эффектов..." -ForegroundColor Cyan
-    
-    try {
-        # Отключение эффектов прозрачности
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Type DWord -Value 0
-        # Отключение эффектов анимации
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Type Binary -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
-        # Отключение эффектов при наведении
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Type DWord -Value 0
-
-        Write-Host "Визуальные эффекты оптимизированы." -ForegroundColor Green
+        # Формируем имя файла резервной копии
+        $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $BackupFile = "$BackupDir\${SettingName}_$Timestamp.bak"
+        
+        # Сохраняем данные в файл
+        $Data | Out-File -FilePath $BackupFile -Encoding UTF8 -Force
+        
+        Write-Host "Created backup of $SettingName in file $BackupFile" -ForegroundColor Green
+        return $BackupFile
     }
     catch {
-        Write-Warning "Произошла ошибка при оптимизации визуальных эффектов: $_"
+        Write-Warning "Failed to create backup of ${SettingName}: ${_}"
+        return $null
     }
 }
-
-# Функция настройки плана электропитания
-function Optimize-PowerPlan {
-    Write-Host "Настройка плана электропитания..." -ForegroundColor Cyan
-    
-    try {
-        # Установка схемы электропитания "Сбалансированная"
-        powercfg -setactive 381b4222-f694-41f0-9685-ff5bb260df2e
-        # Отключение гибернации
-        powercfg -hibernate off
-        # Отключение спящего режима
-        powercfg -change -standby-timeout-ac 0
-        powercfg -change -standby-timeout-dc 0
-
-        Write-Host "План электропитания оптимизирован." -ForegroundColor Green  
-    }
-    catch {
-        Write-Warning "Произошла ошибка при настройке плана электропитания: $_"
-    }
-}
-
-# Функция очистки кэша и оптимизации Telegram 
-function Optimize-Telegram {
-    Write-Host "Оптимизация Telegram..." -ForegroundColor Cyan
-
-    try {
-        $mediaCachePath = "${1}:APPDATA\Telegram Desktop\tdata\user_data\media_cache\*"
-        $tempFilesPath = "${1}:APPDATA\Telegram Desktop\tdata\user_data\temp\*"
-
-        if (Test-Path $mediaCachePath) {
-            Write-Host "Очистка кэша медиафайлов Telegram..."
-            Remove-Item -Path $mediaCachePath -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        if (Test-Path $tempFilesPath) {
-            Write-Host "Очистка временных файлов Telegram..."
-            Remove-Item -Path $tempFilesPath -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        Write-Host "Рекомендации по настройкам Telegram для снижения использования ресурсов:"
-        Write-Host "- Отключите автозагрузку медиафайлов в настройках"
-        Write-Host "- Ограничьте максимальный размер кэша данных (настройка 'Cache max size')"
-        Write-Host "- Включите режим экономии трафика"
-        Write-Host "- Отключите ненужные уведомления и звуки"
-
-        Write-Host "Telegram оптимизирован." -ForegroundColor Green
-    }
-    catch {
-        Write-Warning "Произошла ошибка при оптимизации Telegram: $_"
-    }
-}
-
-# Функция меню
-function Show-Menu {
-    Write-Host "========= Меню оптимизации Windows ========="
-    Write-Host "1. Оптимизация служб Windows"
-    Write-Host "2. Оптимизация визуальных эффектов"
-    Write-Host "3. Настройка плана электропитания"
-    Write-Host "4. Оптимизация Telegram"
-    Write-Host "5. Выполнить все оптимизации"
-    Write-Host "6. Восстановить настройки"
-    Write-Host "0. Выход"
-    Write-Host "============================================="
-
-    $choice = Read-Host "Выберите действие"
-
-    switch ($choice) {
-        1 { Optimize-Services }
 
 # Функция отображения прогресса
 function Show-Progress {
@@ -167,49 +85,167 @@ function Show-Progress {
     )
     
     Write-Progress -Activity $Activity -PercentComplete $PercentComplete
-    Write-Host "[$($Activity)]: $PercentComplete%" -ForegroundColor Cyan
+    Write-Host "[$Activity]: $PercentComplete%" -ForegroundColor Cyan
 }
-        2 { Optimize-VisualEffects }
-        3 { Optimize-PowerPlan }
-        4 { Optimize-Telegram }
-        5 { 
-            Optimize-Services
-            Optimize-VisualEffects
-            Optimize-PowerPlan
-            Optimize-Telegram
+
+# Основная функция оптимизации
+function Optimize-Windows {
+    Write-Host "Starting Windows optimization..." -ForegroundColor Green
+    
+    # Отключение ненужных служб
+    Show-Progress -Activity "Optimization" -PercentComplete 10
+    Disable-Services
+    
+    # Очистка диска
+    Show-Progress -Activity "Optimization" -PercentComplete 40
+    Clean-System
+    
+    # Оптимизация производительности
+    Show-Progress -Activity "Optimization" -PercentComplete 70
+    Optimize-Performance
+    
+    Show-Progress -Activity "Optimization" -PercentComplete 100
+    Write-Host "Optimization completed successfully!" -ForegroundColor Green
+}
+
+# Функция для отключения ненужных служб
+function Disable-Services {
+    Write-Host "Disabling unused services..." -ForegroundColor Cyan
+    
+    $services = @(
+        "DiagTrack",          # Телеметрия
+        "dmwappushservice",   # Служба WAP Push
+        "SysMain",            # Superfetch
+        "WSearch"             # Поиск Windows
+    )
+    
+    foreach ($service in $services) {
+        try {
+            $serviceObj = Get-Service -Name $service -ErrorAction SilentlyContinue
+            if ($serviceObj -and $serviceObj.Status -eq "Running") {
+                Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                Write-Host "Service $service successfully disabled" -ForegroundColor Green
+            }
         }
-        6 { 
-            Optimize-Services -Revert $true
-            # Добавить функции восстановления для других оптимизаций
+        catch {
+            Write-Warning "Failed to disable service ${service}: ${_}"
         }
-        0 { exit }
-        Default { Write-Host "Неверный выбор. Попробуйте еще раз." -ForegroundColor Red }
     }
-
-    Show-Menu
 }
 
-# Основной код скрипта
-Clear-Host
-Write-Host "Проверка прав администратора..."
-
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Warning "Для выполнения скрипта требуются права администратора."
-    Write-Host "Запустите PowerShell от имени администратора и повторите попытку."
-    break
+# Функция для очистки системы
+function Clean-System {
+    Write-Host "Cleaning system..." -ForegroundColor Cyan
+    
+    try {
+        # Очистка временных файлов
+        if (Test-Path "${1}:TEMP") {
+            Remove-Item -Path "${1}:TEMP\*" -Force -Recurse -ErrorAction SilentlyContinue
+            Write-Host "User temporary files folder cleaned" -ForegroundColor Green
+        }
+        
+        if (Test-Path "C:\Windows\Temp") {
+            Remove-Item -Path "C:\Windows\Temp\*" -Force -Recurse -ErrorAction SilentlyContinue
+            Write-Host "System temporary files folder cleaned" -ForegroundColor Green
+        }
+        
+        # Очистка корзины
+        try {
+            Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+            Write-Host "Recycle Bin emptied" -ForegroundColor Green
+        } catch {
+            Write-Warning "Failed to empty Recycle Bin: ${_}"
+        }
+        
+        # Очистка кэша обновлений Windows
+        if (Test-Path "C:\Windows\SoftwareDistribution") {
+            try {
+                Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+                Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Force -Recurse -ErrorAction SilentlyContinue
+                Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+                Write-Host "Windows Update cache cleaned" -ForegroundColor Green
+            } catch {
+                Write-Warning "Failed to clean Windows Update cache: ${_}"
+            }
+        }
+        
+        Write-Host "System cleaning completed successfully" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Error during system cleaning: ${_}"
+    }
 }
 
-Write-Host "Сбор информации о системе..." -ForegroundColor Cyan
-$computerInfo = Get-ComputerInfo
-$osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-$processorInfo = Get-CimInstance -ClassName Win32_Processor
-$gpuInfo = Get-CimInstance -ClassName Win32_VideoController
-$ramInfo = Get-CimInstance -ClassName Win32_PhysicalMemory
+# Функция для оптимизации производительности
+function Optimize-Performance {
+    Write-Host "Optimizing performance..." -ForegroundColor Cyan
+    
+    try {
+        # Отключение визуальных эффектов
+        try {
+            # Сохраняем текущие настройки
+            $currentSettings = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -ErrorAction SilentlyContinue
+            if ($currentSettings) {
+                Backup-Settings -SettingName "VisualEffects" -Data ($currentSettings | Out-String)
+            }
+            
+            # Устанавливаем производительность вместо внешнего вида
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 2 -ErrorAction SilentlyContinue
+            Write-Host "Visual effects set to performance mode" -ForegroundColor Green
+        } catch {
+            Write-Warning "Failed to configure visual effects: ${_}"
+        }
+        
+        # Отключение автозапуска программ
+        try {
+            $startupPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+            if (Test-Path $startupPath) {
+                # Сохраняем текущие настройки
+                $currentStartup = Get-ItemProperty -Path $startupPath -ErrorAction SilentlyContinue
+                if ($currentStartup) {
+                    Backup-Settings -SettingName "Autorun" -Data ($currentStartup | Out-String)
+                }
+                
+                $startupItems = Get-ItemProperty -Path $startupPath
+                foreach ($item in $startupItems.PSObject.Properties) {
+                    if ($item.Name -notlike "PS*") {
+                        Write-Host "Disabling autostart: $($item.Name)" -ForegroundColor Yellow
+                        Remove-ItemProperty -Path $startupPath -Name $item.Name -ErrorAction SilentlyContinue
+                    }
+                }
+                Write-Host "Startup items processing completed" -ForegroundColor Green
+            }
+        } catch {
+            Write-Warning "Failed to process startup items: ${_}"
+        }
+        
+        # Настройка плана электропитания на высокую производительность
+        try {
+            $powerSchemes = powercfg /list | Where-Object { $_ -match "высок|High" }
+            if ($powerSchemes) {
+                $highPerfScheme = $powerSchemes -match "высок|High" | Select-Object -First 1
+                if ($highPerfScheme -match "([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})") {
+                    $schemeGuid = $Matches[1]
+                    powercfg /setactive $schemeGuid
+                    Write-Host "High performance power plan activated" -ForegroundColor Green
+                }
+            }
+        } catch {
+            Write-Warning "Failed to configure power plan: ${_}"
+        }
+        
+        Write-Host "Performance optimization completed successfully" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Error during performance optimization: ${_}"
+    }
+}
 
-Write-Host "Информация о системе:"
-Write-Host "Операционная система: $($osInfo.Caption) $($osInfo.OSArchitecture)"
-Write-Host "Процессор: $($processorInfo.Name)"
-Write-Host "Оперативная память: $($ramInfo.Capacity / 1GB) GB"
-Write-Host "Видеокарта: $($gpuInfo.Name)"
+# Запуск основной функции
+Optimize-Windows
 
-Show-Menu
+# Остановка логирования
+Stop-Transcript
+Write-Host "Optimization completed. Log saved to file: $LogPath" -ForegroundColor Green
+pause
