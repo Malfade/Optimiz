@@ -85,6 +85,18 @@ async def create_anthropic_client() -> Tuple[Optional[Any], Optional[str], Optio
         # Для версии 0.19.0 и выше используем новый клиент
         import anthropic
         
+        # Патчим конструктор Anthropic, удаляя параметр proxies
+        original_init = anthropic.Anthropic.__init__
+        
+        def safe_init(self, *args, **kwargs):
+            if 'proxies' in kwargs:
+                logger.info("Удаляем параметр proxies из инициализации Anthropic клиента")
+                del kwargs['proxies']
+            return original_init(self, *args, **kwargs)
+        
+        # Применяем патч - заменяем оригинальный метод на наш
+        anthropic.Anthropic.__init__ = safe_init
+        
         # Проверяем особенности версии
         if float(version.split('.')[0]) > 0 or float(version.split('.')[1]) >= 19:
             logger.info(f"Используется клиент Anthropic версии >= 0.19.0 (новейший API)")
