@@ -11,7 +11,8 @@ from datetime import datetime
 import zipfile
 import asyncio
 # import anthropic
-import safe_anthropic as anthropic
+# import safe_anthropic as anthropic
+import anthropic_wrapper as anthropic  # Новая безопасная обертка
 import requests
 from dotenv import load_dotenv
 import telebot
@@ -19,6 +20,7 @@ from telebot import types
 from telebot.async_telebot import AsyncTeleBot
 import time
 import pkg_resources
+import inspect
 
 # Проверка на запуск только одного экземпляра бота - кросс-платформенная реализация
 def ensure_single_instance():
@@ -327,19 +329,27 @@ class OptimizationBot:
             anthropic_version = pkg_resources.get_distribution("anthropic").version
             logger.info(f"Используем версию Anthropic API: {anthropic_version}")
             
-            # Инициализируем клиент в зависимости от версии
+            # Railway Debug: проверка наличия переменных окружения с прокси
+            if os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY'):
+                logger.warning(f"Обнаружены переменные окружения прокси: HTTP_PROXY={os.getenv('HTTP_PROXY')}, HTTPS_PROXY={os.getenv('HTTPS_PROXY')}")
+            
+            # Используем безопасный способ создания клиента
+            logger.info("Создаем клиент API через безопасную обертку")
+            self.client = anthropic.create_client(api_key=api_key)
+            
+            # Определяем метод API на основе версии
             if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
-                # Старый API (версии <= 0.5.9)
-                self.client = anthropic.Client(api_key=api_key)
                 self.client_method = "completion"
-                logger.info("Инициализирован клиент API (старая версия)")
+                logger.info("Используем метод API: completion (старая версия)")
             else:
-                # Новый API (версии >= 0.51.0)
-                self.client = anthropic.Anthropic(api_key=api_key)
                 self.client_method = "messages"
-                logger.info("Инициализирован клиент API (новая версия)")
+                logger.info("Используем метод API: messages (новая версия)")
+                
+            logger.info("Клиент API успешно инициализирован")
         except Exception as e:
             logger.error(f"Ошибка при инициализации API клиента: {e}")
+            # Дополнительный вывод для отладки
+            logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
             self.client = None
             self.client_method = None
     
