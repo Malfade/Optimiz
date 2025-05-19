@@ -22,6 +22,13 @@ import time
 import pkg_resources
 import inspect
 
+# Импортируем модуль для healthcheck (для Railway)
+try:
+    import healthcheck
+    has_healthcheck = True
+except ImportError:
+    has_healthcheck = False
+
 # Проверка на запуск только одного экземпляра бота - кросс-платформенная реализация
 def ensure_single_instance():
     """
@@ -2126,6 +2133,16 @@ def main():
             
         logger.info("Запуск бота...")
         
+        # Запускаем healthcheck сервер для Railway
+        if has_healthcheck and os.getenv('RAILWAY_ENVIRONMENT') is not None:
+            logger.info("Запускаем сервер проверки работоспособности для Railway")
+            healthcheck.update_bot_status({"status": "starting"})
+            try:
+                healthcheck.start_health_server()
+                logger.info("Healthcheck сервер успешно запущен")
+            except Exception as e:
+                logger.error(f"Ошибка запуска healthcheck: {e}")
+        
         # Инициализация оптимизатора промптов
         prompt_optimizer = PromptOptimizer()
         
@@ -2146,13 +2163,37 @@ def main():
         # Специальная проверка для Railway
         # Простая обработка конфликта экземпляров
         try:
-            bot.get_me()  # Проверяем подключение к Telegram API
-            logger.info("Соединение с Telegram API установлено успешно")
+            bot_info = bot.get_me()  # Проверяем подключение к Telegram API
+            logger.info(f"Соединение с Telegram API установлено успешно: @{bot_info.username}")
+            
+            # Обновляем статус в healthcheck
+            if has_healthcheck:
+                healthcheck.update_bot_status({
+                    "status": "running", 
+                    "telegram_api_check": True,
+                    "bot_username": bot_info.username
+                })
         except telebot.apihelper.ApiTelegramException as e:
             if "Conflict" in str(e) and "terminated by other getUpdates request" in str(e):
                 logger.error("Обнаружен конфликт с другим экземпляром бота. Завершение работы...")
+                if has_healthcheck:
+                    healthcheck.update_bot_status({"status": "error", "errors": [str(e)]})
                 return  # Завершаем работу этого экземпляра
             raise
+        
+        # Проверка подключения к Claude API
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            # Только проверяем инициализацию клиента без вызова API
+            logger.info("Клиент Claude API успешно инициализирован")
+            
+            # Обновляем статус в healthcheck
+            if has_healthcheck:
+                healthcheck.update_bot_status({"claude_api_check": True})
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации Claude API: {e}")
+            if has_healthcheck:
+                healthcheck.update_bot_status({"claude_api_check": False, "errors": [str(e)]})
             
         # Запуск бота с обработкой ошибок и таймаутами
         while True:
@@ -2164,14 +2205,22 @@ def main():
             except telebot.apihelper.ApiTelegramException as e:
                 if "Conflict" in str(e) and "terminated by other getUpdates request" in str(e):
                     logger.error("Конфликт с другим экземпляром бота. Завершение работы...")
+                    if has_healthcheck:
+                        healthcheck.update_bot_status({"status": "error", "errors": [str(e)]})
                     return  # Завершаем работу при конфликте
                 logger.error(f"Ошибка API Telegram: {e}")
+                if has_healthcheck:
+                    healthcheck.update_bot_status({"status": "error", "errors": [str(e)]})
                 time.sleep(30)  # Увеличенная пауза при ошибках API
             except Exception as e:
                 logger.error(f"Ошибка в polling: {e}")
+                if has_healthcheck:
+                    healthcheck.update_bot_status({"status": "error", "errors": [str(e)]})
                 time.sleep(30)  # Более длительная пауза при других ошибках
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске бота: {e}")
+        if has_healthcheck:
+            healthcheck.update_bot_status({"status": "crashed", "errors": [str(e)]})
 
 if __name__ == "__main__":
     main() 
