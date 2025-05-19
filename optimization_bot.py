@@ -10,8 +10,8 @@ from io import BytesIO
 from datetime import datetime
 import zipfile
 import asyncio
-# Используем прямой импорт, так как патч уже должен быть применен
-import safe_anthropic as anthropic
+# Используем прямой импорт нашей собственной реализации
+import fallback_anthropic as anthropic
 # Обертки для обратной совместимости
 # import anthropic_wrapper as anthropic
 import requests
@@ -318,53 +318,35 @@ class OptimizationBot:
     
     def __init__(self, api_key, validator=None):
         """
-        Инициализирует бота
+        Инициализация бота оптимизации
         
         Args:
-            api_key: API ключ для Anthropic Claude
-            validator: экземпляр ScriptValidator (если None, будет создан новый)
+            api_key: API ключ для Anthropic
+            validator: Экземпляр ScriptValidator или None
         """
-        self.api_key = api_key
-        self.validator = validator or ScriptValidator()
-        self.metrics = ScriptMetrics()
-        self.prompt_optimizer = PromptOptimizer(metrics=self.metrics)
-                
-        self.prompts = self.prompt_optimizer.get_optimized_prompts()
-        
-        # Инициализация API клиента
         try:
-            # Определяем версию API
-            anthropic_version = pkg_resources.get_distribution("anthropic").version
-            logger.info(f"Используем версию Anthropic API: {anthropic_version}")
+            # Сохраняем API ключ
+            self.api_key = api_key
             
-            # Создаем клиент напрямую, так как патч должен быть уже применен
-            logger.info("Создаем клиент API напрямую")
-            # Используем create_client вместо прямого вызова конструктора для предотвращения ошибки с proxies
-            if hasattr(anthropic, 'create_client'):
-                self.client = anthropic.create_client(api_key=api_key)
-                logger.info("Клиент API успешно инициализирован через create_client")
-            else:
-                # Безопасный способ создания клиента без параметра proxies
-                self.client = anthropic.Anthropic(api_key=api_key)
-                logger.info("Клиент API успешно инициализирован через конструктор")
+            # Создаем клиент API (используем нашу собственную реализацию)
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+            logger.info("OptimizationBot: Клиент Claude API успешно инициализирован")
+
+            # Инициализация валидатора
+            self.validator = validator if validator else ScriptValidator()
             
-            # Определяем метод API на основе версии
-            if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
-                self.client_method = "completion"
-                logger.info("Используем метод API: completion (старая версия)")
-            else:
-                self.client_method = "messages"
-                logger.info("Используем метод API: messages (новая версия)")
-                
+            # Модель для использования
+            self.models = {
+                "default": "claude-3-haiku-20240307",  # Быстрая и доступная модель
+                "high_quality": "claude-3-opus-20240229"  # Для сложных случаев
+            }
+            
+            # Проверка состояния
+            self.is_initialized = True
+            logger.info("Бот оптимизации Windows запущен!")
         except Exception as e:
-            logger.error(f"Ошибка при инициализации API клиента: {e}")
-            # Дополнительный вывод для отладки
-            try:
-                logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
-            except Exception:
-                logger.error("Не удалось получить сигнатуру Anthropic.__init__")
-            self.client = None
-            self.client_method = None
+            logger.error(f"Ошибка при инициализации бота оптимизации: {e}")
+            self.is_initialized = False
     
     async def generate_new_script(self, message):
         """Генерация нового скрипта оптимизации на основе скриншота системы"""
@@ -2158,19 +2140,27 @@ def main():
         
         # Проверка подключения к Claude API
         try:
-            # Безопасный способ создания клиента без параметра proxies
-            if hasattr(anthropic, 'create_client'):
-                client = anthropic.create_client(api_key=ANTHROPIC_API_KEY)
-                logger.info("Клиент Claude API успешно инициализирован через create_client")
-            else:
-                client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-                logger.info("Клиент Claude API успешно инициализирован через конструктор")
+            # Создаем клиент используя нашу собственную реализацию
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            logger.info("Клиент Claude API успешно инициализирован")
+            
+            # Тестируем клиент отправкой запроса
+            try:
+                test_response = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=10,
+                    messages=[{"role": "user", "content": "Test connection"}]
+                )
+                logger.info(f"Тестовый запрос успешно отправлен: {test_response.content[0].text[:20] if test_response.content else 'Нет ответа'}")
+            except Exception as test_err:
+                logger.warning(f"Тестовый запрос не выполнен: {test_err}")
             
             # Обновляем статус в healthcheck
             if has_healthcheck:
                 healthcheck.update_bot_status({"claude_api_check": True})
         except Exception as e:
             logger.error(f"Ошибка при инициализации Claude API: {e}")
+            logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
             if has_healthcheck:
                 healthcheck.update_bot_status({"claude_api_check": False, "errors": [str(e)]})
             

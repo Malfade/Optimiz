@@ -27,35 +27,37 @@ for env_var in proxy_env_vars:
 
 logger.info(f"Удалены переменные прокси: {saved_proxies}")
 
-# ИСПОЛЬЗУЕМ ТОЛЬКО FALLBACK РЕАЛИЗАЦИЮ
-# Игнорируем все другие варианты (safe_anthropic, anthropic_wrapper и оригинальную библиотеку)
+# Сначала импортируем fix_imports, который исправит импорты anthropic
 try:
-    logger.info("▶️ ИСПОЛЬЗУЕМ ТОЛЬКО FALLBACK_ANTHROPIC - САМЫЙ НАДЕЖНЫЙ ВАРИАНТ")
-    
-    # Подменяем модуль anthropic на наш fallback_anthropic
-    import fallback_anthropic
-    sys.modules['anthropic'] = fallback_anthropic
-    import anthropic
-    
-    # Проверим, действительно ли работает
-    logger.info("🔍 Проверяем работоспособность fallback_anthropic...")
-    test_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    logger.info(f"✅ Клиент успешно создан! {test_client.__class__.__name__}")
-    
-    # Вторая проверка
-    try:
-        test_message = test_client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=10,
-            messages=[{"role": "user", "content": "Hello!"}]
-        )
-        logger.info(f"✅✅ ТЕСТОВОЕ СООБЩЕНИЕ УСПЕШНО ОТПРАВЛЕНО! {test_message.content[0].text[:20] if test_message.content else 'Нет контента'}")
-    except Exception as msg_error:
-        logger.error(f"❌ Ошибка при отправке тестового сообщения: {msg_error}")
-    
-    logger.info("✅✅✅ FALLBACK ANTHROPIC УСПЕШНО ИНИЦИАЛИЗИРОВАН")
+    import fix_imports
+    logger.info("✅ Модуль fix_imports успешно загружен и применен")
 except Exception as e:
-    logger.critical(f"❌❌❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ИНИЦИАЛИЗАЦИИ FALLBACK_ANTHROPIC: {e}")
+    logger.critical(f"❌ Ошибка при загрузке fix_imports: {e}")
+    sys.exit(1)
+
+# Теперь anthropic должен быть доступен как fallback_anthropic
+try:
+    import anthropic
+    logger.info(f"✅ Модуль anthropic успешно импортирован через fix_imports: {anthropic.__name__}")
+    
+    # Тестируем создание клиента
+    test_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    logger.info(f"✅ Клиент успешно создан: {test_client.__class__.__name__}")
+    
+    # Тестовый запрос (опционально)
+    try:
+        if os.getenv("ANTHROPIC_API_KEY"):
+            test_message = test_client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Test connection"}]
+            )
+            logger.info(f"✅✅ ТЕСТОВЫЙ ЗАПРОС УСПЕШНО ОТПРАВЛЕН: {test_message.content[0].text[:20] if test_message.content else 'Нет ответа'}")
+    except Exception as test_err:
+        logger.warning(f"⚠️ Тестовый запрос не выполнен (некритично): {test_err}")
+    
+except Exception as e:
+    logger.critical(f"❌❌❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ИНИЦИАЛИЗАЦИИ ANTHROPIC: {e}")
     sys.exit(1)
 
 # Теперь импортируем основной файл бота
