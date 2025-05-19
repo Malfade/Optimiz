@@ -35,11 +35,45 @@ class SafeAnthropic:
         
         # Создаем реальный Anthropic клиент
         try:
+            # Очищаем переменные окружения HTTP_PROXY и HTTPS_PROXY
+            # которые Railway может автоматически добавлять
+            original_http_proxy = os.environ.pop('HTTP_PROXY', None)
+            original_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+            original_http_proxy_lower = os.environ.pop('http_proxy', None)
+            original_https_proxy_lower = os.environ.pop('https_proxy', None)
+            
+            # Создаем клиент БЕЗ параметра proxies
+            logger.info("Creating Anthropic client without proxies parameter")
             self.client = original_anthropic.Anthropic(api_key=api_key)
+            
+            # Восстанавливаем переменные окружения
+            if original_http_proxy:
+                os.environ['HTTP_PROXY'] = original_http_proxy
+            if original_https_proxy:
+                os.environ['HTTPS_PROXY'] = original_https_proxy
+            if original_http_proxy_lower:
+                os.environ['http_proxy'] = original_http_proxy_lower
+            if original_https_proxy_lower:
+                os.environ['https_proxy'] = original_https_proxy_lower
+                
             logger.info(f"Original Anthropic client created successfully")
         except Exception as e:
             logger.error(f"Error creating Anthropic client: {e}")
-            raise
+            # Попробуем еще один способ - создание без конструктора
+            try:
+                # Используем другой подход к созданию клиента - через модуль напрямую
+                logger.info("Trying alternative way to create client")
+                
+                # Смотрим какие библиотеки есть для создания клиента
+                if hasattr(original_anthropic, 'Client'):
+                    logger.info("Using Client class")
+                    self.client = original_anthropic.Client(api_key=api_key)
+                else:
+                    # Если все попытки не удались, выбрасываем исключение
+                    raise e
+            except Exception as alt_error:
+                logger.error(f"Alternative client creation also failed: {alt_error}")
+                raise e
     
     # Делегируем все вызовы к реальному клиенту
     def __getattr__(self, name):
@@ -57,8 +91,38 @@ def create_client(api_key=None):
         logger.error("API key not provided and not found in environment variables")
         raise ValueError("API key is required")
     
-    logger.info(f"Creating client with SafeAnthropic")
-    return SafeAnthropic(api_key=api_key)
+    # Очищаем переменные окружения HTTP_PROXY и HTTPS_PROXY перед созданием клиента
+    original_http_proxy = os.environ.pop('HTTP_PROXY', None)
+    original_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+    original_http_proxy_lower = os.environ.pop('http_proxy', None)
+    original_https_proxy_lower = os.environ.pop('https_proxy', None)
+    
+    try:
+        logger.info(f"Creating client with SafeAnthropic (with clean environment)")
+        client = SafeAnthropic(api_key=api_key)
+        logger.info(f"Successfully created client with SafeAnthropic")
+        return client
+    except Exception as e:
+        logger.error(f"Error creating client with SafeAnthropic: {e}")
+        # Попробуем создать напрямую через оригинальный модуль
+        try:
+            logger.info("Trying to create client directly")
+            client = original_anthropic.Anthropic(api_key=api_key)
+            logger.info("Successfully created client directly")
+            return client
+        except Exception as direct_error:
+            logger.error(f"Direct client creation failed too: {direct_error}")
+            raise e
+    finally:
+        # Восстанавливаем переменные окружения
+        if original_http_proxy:
+            os.environ['HTTP_PROXY'] = original_http_proxy
+        if original_https_proxy:
+            os.environ['HTTPS_PROXY'] = original_https_proxy
+        if original_http_proxy_lower:
+            os.environ['http_proxy'] = original_http_proxy_lower
+        if original_https_proxy_lower:
+            os.environ['https_proxy'] = original_https_proxy_lower
 
 # Применяем прямой патч к оригинальному классу
 original_init = original_anthropic.Anthropic.__init__
