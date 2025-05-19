@@ -11,7 +11,7 @@ from datetime import datetime
 import zipfile
 import asyncio
 # Используем прямой импорт, так как патч уже должен быть применен
-import anthropic
+import safe_anthropic as anthropic
 # Обертки для обратной совместимости
 # import anthropic_wrapper as anthropic
 import requests
@@ -339,8 +339,14 @@ class OptimizationBot:
             
             # Создаем клиент напрямую, так как патч должен быть уже применен
             logger.info("Создаем клиент API напрямую")
-            self.client = anthropic.Anthropic(api_key=api_key)
-            logger.info("Клиент API успешно инициализирован")
+            # Используем create_client вместо прямого вызова конструктора для предотвращения ошибки с proxies
+            if hasattr(anthropic, 'create_client'):
+                self.client = anthropic.create_client(api_key=api_key)
+                logger.info("Клиент API успешно инициализирован через create_client")
+            else:
+                # Безопасный способ создания клиента без параметра proxies
+                self.client = anthropic.Anthropic(api_key=api_key)
+                logger.info("Клиент API успешно инициализирован через конструктор")
             
             # Определяем метод API на основе версии
             if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
@@ -2152,9 +2158,13 @@ def main():
         
         # Проверка подключения к Claude API
         try:
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            # Только проверяем инициализацию клиента без вызова API
-            logger.info("Клиент Claude API успешно инициализирован")
+            # Безопасный способ создания клиента без параметра proxies
+            if hasattr(anthropic, 'create_client'):
+                client = anthropic.create_client(api_key=ANTHROPIC_API_KEY)
+                logger.info("Клиент Claude API успешно инициализирован через create_client")
+            else:
+                client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+                logger.info("Клиент Claude API успешно инициализирован через конструктор")
             
             # Обновляем статус в healthcheck
             if has_healthcheck:
