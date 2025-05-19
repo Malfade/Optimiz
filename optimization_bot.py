@@ -10,9 +10,10 @@ from io import BytesIO
 from datetime import datetime
 import zipfile
 import asyncio
-# import anthropic
-# import safe_anthropic as anthropic
-import anthropic_wrapper as anthropic  # Новая безопасная обертка
+# Используем прямой импорт, так как патч уже должен быть применен
+import anthropic
+# Обертки для обратной совместимости
+# import anthropic_wrapper as anthropic
 import requests
 from dotenv import load_dotenv
 import telebot
@@ -336,40 +337,10 @@ class OptimizationBot:
             anthropic_version = pkg_resources.get_distribution("anthropic").version
             logger.info(f"Используем версию Anthropic API: {anthropic_version}")
             
-            # Railway Debug: проверка наличия переменных окружения с прокси
-            if os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY'):
-                logger.warning(f"Обнаружены переменные окружения прокси: HTTP_PROXY={os.getenv('HTTP_PROXY')}, HTTPS_PROXY={os.getenv('HTTPS_PROXY')}")
-            
-            # Используем безопасный способ создания клиента
-            logger.info("Создаем клиент API через безопасную обертку")
-            
-            # Пробуем разные способы создания клиента один за другим
-            try:
-                # Сначала пробуем safe_anthropic
-                import safe_anthropic
-                self.client = safe_anthropic.create_client(api_key=api_key)
-                logger.info("Клиент API успешно создан через safe_anthropic")
-            except Exception as e1:
-                logger.warning(f"Не удалось создать клиент через safe_anthropic: {e1}")
-                try:
-                    # Затем пробуем direct_fix
-                    import direct_fix
-                    self.client = direct_fix.create_client(api_key=api_key)
-                    logger.info("Клиент API успешно создан через direct_fix")
-                except Exception as e2:
-                    logger.warning(f"Не удалось создать клиент через direct_fix: {e2}")
-                    try:
-                        # Затем anthropic_wrapper
-                        import anthropic_wrapper
-                        self.client = anthropic_wrapper.create_client(api_key=api_key)
-                        logger.info("Клиент API успешно создан через anthropic_wrapper")
-                    except Exception as e3:
-                        logger.warning(f"Не удалось создать клиент через anthropic_wrapper: {e3}")
-                        # Наконец, пробуем напрямую (это может не сработать в Railway из-за proxies)
-                        import anthropic
-                        # Используем прямое создание с минимальными аргументами
-                        self.client = anthropic.Anthropic(api_key=api_key)
-                        logger.info("Клиент API успешно создан напрямую через anthropic")
+            # Создаем клиент напрямую, так как патч должен быть уже применен
+            logger.info("Создаем клиент API напрямую")
+            self.client = anthropic.Anthropic(api_key=api_key)
+            logger.info("Клиент API успешно инициализирован")
             
             # Определяем метод API на основе версии
             if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
@@ -379,12 +350,10 @@ class OptimizationBot:
                 self.client_method = "messages"
                 logger.info("Используем метод API: messages (новая версия)")
                 
-            logger.info("Клиент API успешно инициализирован")
         except Exception as e:
             logger.error(f"Ошибка при инициализации API клиента: {e}")
             # Дополнительный вывод для отладки
             try:
-                import anthropic
                 logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
             except Exception:
                 logger.error("Не удалось получить сигнатуру Anthropic.__init__")
