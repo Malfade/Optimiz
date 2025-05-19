@@ -341,6 +341,18 @@ class OptimizationBot:
                 "high_quality": "claude-3-opus-20240229"  # Для сложных случаев
             }
             
+            # Инициализация промптов
+            self.prompts = {
+                "OPTIMIZATION_PROMPT_TEMPLATE": OPTIMIZATION_PROMPT_TEMPLATE,
+                "ERROR_FIX_PROMPT_TEMPLATE": ERROR_FIX_PROMPT_TEMPLATE
+            }
+            
+            # Инициализация метрик
+            self.metrics = ScriptMetrics()
+            
+            # Тип клиента и метод вызова API
+            self.client_method = "messages"
+            
             # Проверка состояния
             self.is_initialized = True
             logger.info("Бот оптимизации Windows запущен!")

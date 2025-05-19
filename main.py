@@ -14,6 +14,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Проверка аргументов командной строки
+if len(sys.argv) > 1 and sys.argv[1] == '--check-env':
+    logger.info("Запрошена проверка окружения Railway")
+    try:
+        from check_railway_command import check_railway_env
+        check_railway_env()
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Ошибка при проверке окружения: {e}")
+        sys.exit(1)
+
 # КРИТИЧЕСКИ ВАЖНО: Очищаем переменные окружения прокси
 # Railway автоматически добавляет эти переменные, что вызывает ошибки
 proxy_env_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']
