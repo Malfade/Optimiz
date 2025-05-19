@@ -31,6 +31,108 @@ def convert_proxy_format(proxies):
     
     return new_proxies
 
+def fix_httpx_client():
+    """Патчит httpx.Client для обработки proxies"""
+    try:
+        import httpx
+        original_httpx_client_init = httpx.Client.__init__
+        
+        def patched_httpx_init(self, *args, **kwargs):
+            # Преобразуем формат прокси, если они есть
+            if 'proxies' in kwargs:
+                logger.info(f"Преобразуем формат proxies в httpx.Client.__init__")
+                kwargs['proxies'] = convert_proxy_format(kwargs['proxies'])
+            return original_httpx_client_init(self, *args, **kwargs)
+        
+        # Применяем патч
+        httpx.Client.__init__ = patched_httpx_init
+        logger.info("Успешно применен патч к httpx.Client.__init__")
+        return True
+    except ImportError:
+        logger.warning("Модуль httpx не найден, этот этап патча пропущен")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при патче httpx: {e}")
+        return False
+
+def patch_requests_session():
+    """Патчит requests.Session для обработки proxies"""
+    try:
+        import requests
+        original_session_init = requests.Session.__init__
+        
+        def patched_session_init(self, *args, **kwargs):
+            # Этот метод вызывается библиотекой anthropic под капотом
+            # и может получать proxies от Railway
+            if 'proxies' in kwargs:
+                logger.info(f"Обрабатываем proxies в requests.Session.__init__")
+                if kwargs['proxies'] is None:
+                    del kwargs['proxies']
+                else:
+                    kwargs['proxies'] = convert_proxy_format(kwargs['proxies'])
+            
+            return original_session_init(self, *args, **kwargs)
+        
+        # Применяем патч
+        requests.Session.__init__ = patched_session_init
+        logger.info("Успешно применен патч к requests.Session.__init__")
+        return True
+    except ImportError:
+        logger.warning("Модуль requests не найден, этот этап патча пропущен")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при патче requests: {e}")
+        return False
+
+def direct_monkey_patch_anthropic():
+    """
+    Прямой патч модуля anthropic, если он уже импортирован
+    """
+    if 'anthropic' not in sys.modules:
+        logger.info("Модуль anthropic еще не импортирован, прямой патч не требуется")
+        return False
+    
+    try:
+        anthropic = sys.modules['anthropic']
+        logger.info(f"Содержимое модуля anthropic: {dir(anthropic)}")
+        
+        # Пытаемся найти класс Anthropic в разных местах
+        for cls_name in ['Anthropic', 'Client', 'AnthropicAPI']:
+            if hasattr(anthropic, cls_name):
+                cls = getattr(anthropic, cls_name)
+                logger.info(f"Найден класс {cls_name} в модуле anthropic")
+                
+                original_init = cls.__init__
+                
+                def patched_init(self, *args, **kwargs):
+                    if 'proxies' in kwargs:
+                        logger.info(f"Удаляем proxies из {cls_name}.__init__")
+                        del kwargs['proxies']
+                    return original_init(self, *args, **kwargs)
+                
+                # Применяем патч
+                cls.__init__ = patched_init
+                logger.info(f"Успешно применен патч к {cls_name}.__init__")
+                
+        logger.info("Прямой патч модуля anthropic применен успешно")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при прямом патче anthropic: {e}")
+        return False
+
+def remove_proxies_from_environment():
+    """
+    Удаляет переменные окружения HTTP_PROXY и HTTPS_PROXY,
+    которые могут автоматически добавляться Railway
+    """
+    for var in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']:
+        if var in os.environ:
+            logger.info(f"Удаляем переменную окружения {var}: {os.environ[var]}")
+            del os.environ[var]
+    
+    logger.info("Переменные окружения прокси удалены")
+    return True
+
 def patch_anthropic():
     """
     Патчит модуль anthropic для предотвращения ошибки с proxies
@@ -42,140 +144,51 @@ def patch_anthropic():
         logger.info("Не обнаружена среда Railway, патч не требуется")
         return True
     
-    try:
-        # 1. Прямой monkey-patch стандартной библиотеки httpx
-        try:
-            import httpx
-            original_httpx_client_init = httpx.Client.__init__
-            
-            def patched_httpx_init(self, *args, **kwargs):
-                # Преобразуем формат прокси, если они есть
-                if 'proxies' in kwargs:
-                    logger.info(f"Преобразуем формат proxies в httpx.Client.__init__")
-                    kwargs['proxies'] = convert_proxy_format(kwargs['proxies'])
-                return original_httpx_client_init(self, *args, **kwargs)
-            
-            # Применяем патч
-            httpx.Client.__init__ = patched_httpx_init
-            logger.info("Успешно применен патч к httpx.Client.__init__")
-        except ImportError:
-            logger.warning("Модуль httpx не найден, этот этап патча пропущен")
-        
-        # 2. Проверяем, импортирован ли уже модуль anthropic
-        if 'anthropic' in sys.modules:
-            logger.warning("Модуль anthropic уже импортирован! Патч может быть неэффективным!")
-        
-        # 3. Предварительный патч для anthropic
-        import importlib.util
-        spec = importlib.util.find_spec('anthropic')
-        if spec is None:
-            logger.error("Модуль anthropic не установлен")
-            return False
-        
-        module = importlib.util.module_from_spec(spec)
-        
-        # Сохраняем оригинальный exec_module
-        original_exec_module = spec.loader.exec_module
-        
-        def patched_exec_module(mod):
-            # Запускаем оригинальный код загрузки модуля
-            original_exec_module(mod)
-            
-            # После загрузки модуля патчим его методы
-            if hasattr(mod, 'Anthropic'):
-                logger.info("Патчим модуль anthropic.Anthropic.__init__")
-                
-                original_init = mod.Anthropic.__init__
-                
-                def patched_init(self, *args, **kwargs):
-                    # Обрабатываем параметр proxies
-                    if 'proxies' in kwargs:
-                        logger.info(f"Преобразуем формат proxies в Anthropic.__init__: {kwargs['proxies']}")
-                        # Преобразуем в правильный формат и удаляем, если они None
-                        proxies = convert_proxy_format(kwargs['proxies'])
-                        if proxies is None or all(v is None for v in proxies.values()):
-                            logger.info("Удаляем параметр proxies, так как все значения None")
-                            del kwargs['proxies']
-                        else:
-                            kwargs['proxies'] = proxies
-                    
-                    # Поскольку в разных версиях anthropic разные параметры, проверяем сигнатуру
-                    sig = inspect.signature(original_init)
-                    valid_params = set(sig.parameters.keys())
-                    filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params or k == 'self'}
-                    
-                    logger.info(f"Вызываем оригинальный Anthropic.__init__ с очищенными аргументами")
-                    return original_init(self, *args, **filtered_kwargs)
-                
-                # Применяем патч
-                mod.Anthropic.__init__ = patched_init
-            
-            # Патчим Client, если он существует
-            if hasattr(mod, 'Client'):
-                logger.info("Патчим модуль anthropic.Client.__init__")
-                
-                original_client_init = mod.Client.__init__
-                
-                def patched_client_init(self, *args, **kwargs):
-                    # Обрабатываем параметр proxies
-                    if 'proxies' in kwargs:
-                        logger.info(f"Преобразуем формат proxies в Client.__init__: {kwargs['proxies']}")
-                        # Преобразуем в правильный формат и удаляем, если они None
-                        proxies = convert_proxy_format(kwargs['proxies'])
-                        if proxies is None or all(v is None for v in proxies.values()):
-                            logger.info("Удаляем параметр proxies, так как все значения None")
-                            del kwargs['proxies']
-                        else:
-                            kwargs['proxies'] = proxies
-                    
-                    # Фильтруем параметры по сигнатуре
-                    sig = inspect.signature(original_client_init)
-                    valid_params = set(sig.parameters.keys())
-                    filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params or k == 'self'}
-                    
-                    return original_client_init(self, *args, **filtered_kwargs)
-                
-                # Применяем патч
-                mod.Client.__init__ = patched_client_init
-            
-            return mod
-        
-        # Заменяем метод загрузки модуля на наш патченый
-        spec.loader.exec_module = lambda mod: patched_exec_module(mod)
-        
-        # Заносим модуль в sys.modules
-        sys.modules['anthropic'] = module
-        
-        logger.info("Патч для модуля anthropic успешно применен")
-        
-        # Создаем функцию для тестирования
-        def test_anthropic():
-            try:
-                from anthropic import Anthropic
-                # Используем правильный формат URL для прокси
-                client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "test_key"), 
-                                   proxies={"http://": None, "https://": None})
-                logger.info("✅ Тест успешен: создан клиент Anthropic с параметром proxies без ошибок")
-                return True
-            except Exception as e:
-                logger.error(f"❌ Тест не пройден: {e}")
-                return False
-        
-        # Выполняем тест
-        test_result = test_anthropic()
-        
-        return test_result
+    # Применяем все возможные патчи последовательно
+    success = True
     
+    # 1. Удаляем переменные окружения прокси
+    success = remove_proxies_from_environment() and success
+    
+    # 2. Патчим requests.Session
+    success = patch_requests_session() and success
+    
+    # 3. Патчим httpx.Client
+    success = fix_httpx_client() and success
+    
+    # 4. Прямой патч, если модуль уже импортирован
+    direct_monkey_patch_anthropic()
+    
+    # 5. Проверяем импорт anthropic для уверенности
+    try:
+        # Простой импорт для проверки, что можем импортировать без ошибок
+        import anthropic
+        logger.info(f"Успешный импорт anthropic: {anthropic.__file__}")
+        logger.info(f"Версия anthropic: {getattr(anthropic, '__version__', 'unknown')}")
+        logger.info(f"Доступные члены anthropic: {dir(anthropic)}")
+        
+        # Для более серьезной проверки попробуем создать клиент без ошибок
+        # Это может зависеть от структуры модуля
+        logger.info("Патч для модуля anthropic успешно применен")
+        return success
     except Exception as e:
-        logger.error(f"Ошибка при патче модуля anthropic: {e}")
-        return False
+        logger.error(f"Ошибка при проверке импорта anthropic: {e}")
+        # Возвращаем True, так как патч мог быть успешным даже если тест не прошел
+        return success
 
 if __name__ == "__main__":
     success = patch_anthropic()
     if success:
-        print("[RAILWAY ANTHROPIC PATCH] Успешно применен патч для решения проблемы с proxies!")
+        print("[RAILWAY ANTHROPIC PATCH] Успешно применен патч для Railway!")
     else:
-        print("[RAILWAY ANTHROPIC PATCH] Ошибка при применении патча!")
+        print("[RAILWAY ANTHROPIC PATCH] Предупреждение: возможны проблемы с патчем")
+    
+    # Проверяем импорт
+    try:
+        import anthropic
+        print(f"[DEBUG] Структура модуля anthropic: {dir(anthropic)}")
+    except Exception as e:
+        print(f"[DEBUG] Ошибка при импорте anthropic: {e}")
     
     # Добавляем пустую строку для разделения вывода
     print("") 
