@@ -10,7 +10,8 @@ from io import BytesIO
 from datetime import datetime
 import zipfile
 import asyncio
-import anthropic
+# import anthropic
+import safe_anthropic as anthropic
 import requests
 from dotenv import load_dotenv
 import telebot

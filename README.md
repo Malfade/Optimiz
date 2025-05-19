@@ -112,4 +112,11 @@ python optimization_bot.py
    - Для откатов оптимизаций можно использовать точки восстановления системы
    - Резервные копии создаются в папке `%USERPROFILE%\WindowsOptimizer_Backups` 
 
-   убейте меня
+## Исправление для Railway
+
+Если вы столкнулись с ошибкой `__init__() got an unexpected keyword argument 'proxies'` при деплое на Railway, эта ошибка была исправлена следующим образом:
+
+1. Изменен импорт в `optimization_bot.py` для использования `safe_anthropic` вместо оригинального модуля `anthropic`.
+2. Обновлен файл `railway.json` для запуска `patch_before_import.py` перед основным скриптом бота.
+
+Эти изменения обеспечивают удаление параметра `proxies` при инициализации API клиента Anthropic, что решает проблему с Railway.
