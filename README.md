@@ -109,26 +109,66 @@ python optimization_bot.py
 
 ## Исправление проблемы с proxies в Railway
 
-Если вы столкнулись с ошибкой `__init__() got an unexpected keyword argument 'proxies'` при деплое на Railway, мы реализовали несколько подходов к решению этой проблемы:
+Если вы столкнулись с ошибкой `__init__() got an unexpected keyword argument 'proxies'` при деплое на Railway, мы разработали несколько подходов для решения этой проблемы:
 
-### Решение 1: Прямое исправление (Рекомендуется)
+### Решение 1: Safe Anthropic (Рекомендуемый)
 
-Этот метод патчит библиотеку Anthropic на самом низком уровне, модифицируя базовый HTTP клиент:
+Создает безопасную обертку для клиента Anthropic, которая удаляет параметр `proxies` перед передачей в оригинальный конструктор.
 
-1. Создан файл `safe_anthropic.py`, который патчит класс `SyncHttpxClientWrapper` в Anthropic API
-2. Обновлен файл `railway.json` для запуска `safe_anthropic.py` перед основным скриптом бота
+**Использование в коде:**
+```python
+import safe_anthropic as anthropic
+client = anthropic.Anthropic(api_key=your_key, proxies=any_proxies)  # proxies будет удален
+```
 
-Для быстрого решения проблемы используйте инструкции в файле [PROXIES_ISSUE_QUICKFIX.md](PROXIES_ISSUE_QUICKFIX.md).
+**Конфигурация в railway.json:**
+```json
+"startCommand": "python safe_anthropic.py && python your_main_script.py"
+```
 
-### Решение 2: Обертки для Anthropic API
+### Решение 2: Anthropic Wrapper
 
-Дополнительно реализованы две обертки для Anthropic API:
+Предоставляет альтернативный интерфейс к Anthropic API с аналогичным решением.
 
-1. `safe_anthropic.py` - базовая обертка, которая перехватывает параметр `proxies`
-2. `anthropic_wrapper.py` - расширенная обертка с дополнительной обработкой ошибок
+**Использование в коде:**
+```python
+import anthropic_wrapper as anthropic
+client = anthropic.Anthropic(api_key=your_key, proxies=any_proxies)  # proxies будет удален
+```
 
-### Тестирование фиксов
+**Или:**
+```python
+import anthropic_wrapper
+client = anthropic_wrapper.create_client(api_key=your_key)
+```
 
-Для проверки работоспособности всех методов создан файл `test_all_fixes.py`, который тестирует каждый подход по отдельности и в комбинации.
+### Решение 3: Direct Fix
 
-Наиболее надежным решением является использование обертки `safe_anthropic.py`.
+Патчит библиотеку Anthropic напрямую, изменяя конструктор класса `Anthropic`. Требует запуска перед основным скриптом.
+
+**Конфигурация в railway.json:**
+```json
+"startCommand": "python direct_fix.py && python your_main_script.py"
+```
+
+## Тестирование
+
+Все решения протестированы в скрипте `test_all_fixes.py`. Результаты показывают, что все методы успешно решают проблему с параметром `proxies`.
+
+```
+РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ:
+=======================
+Базовая библиотека: ❌ НЕ РАБОТАЕТ С PROXIES (ОЖИДАЕМО)
+direct_fix: ✅ УСПЕШНО
+safe_anthropic: ✅ УСПЕШНО
+anthropic_wrapper: ✅ УСПЕШНО
+combined_approach: ✅ УСПЕШНО
+```
+
+## Рекомендации
+
+Используйте `safe_anthropic` как самый надежный и простой метод обхода проблемы с proxies в Anthropic API.
+
+## Версии
+
+Протестировано с версией библиотеки Anthropic 0.51.0.
