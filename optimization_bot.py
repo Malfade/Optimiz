@@ -335,7 +335,34 @@ class OptimizationBot:
             
             # Используем безопасный способ создания клиента
             logger.info("Создаем клиент API через безопасную обертку")
-            self.client = anthropic.create_client(api_key=api_key)
+            
+            # Пробуем разные способы создания клиента один за другим
+            try:
+                # Сначала пробуем safe_anthropic
+                import safe_anthropic
+                self.client = safe_anthropic.create_client(api_key=api_key)
+                logger.info("Клиент API успешно создан через safe_anthropic")
+            except Exception as e1:
+                logger.warning(f"Не удалось создать клиент через safe_anthropic: {e1}")
+                try:
+                    # Затем пробуем direct_fix
+                    import direct_fix
+                    self.client = direct_fix.create_client(api_key=api_key)
+                    logger.info("Клиент API успешно создан через direct_fix")
+                except Exception as e2:
+                    logger.warning(f"Не удалось создать клиент через direct_fix: {e2}")
+                    try:
+                        # Затем anthropic_wrapper
+                        import anthropic_wrapper
+                        self.client = anthropic_wrapper.create_client(api_key=api_key)
+                        logger.info("Клиент API успешно создан через anthropic_wrapper")
+                    except Exception as e3:
+                        logger.warning(f"Не удалось создать клиент через anthropic_wrapper: {e3}")
+                        # Наконец, пробуем напрямую (это может не сработать в Railway из-за proxies)
+                        import anthropic
+                        # Используем прямое создание с минимальными аргументами
+                        self.client = anthropic.Anthropic(api_key=api_key)
+                        logger.info("Клиент API успешно создан напрямую через anthropic")
             
             # Определяем метод API на основе версии
             if anthropic_version.startswith("0.5") and int(anthropic_version.split(".")[1]) < 51:
@@ -349,7 +376,11 @@ class OptimizationBot:
         except Exception as e:
             logger.error(f"Ошибка при инициализации API клиента: {e}")
             # Дополнительный вывод для отладки
-            logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
+            try:
+                import anthropic
+                logger.error(f"Аргументы конструктора Anthropic: {inspect.signature(anthropic.Anthropic.__init__)}")
+            except Exception:
+                logger.error("Не удалось получить сигнатуру Anthropic.__init__")
             self.client = None
             self.client_method = None
     

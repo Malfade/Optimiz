@@ -20,59 +20,30 @@ logger = logging.getLogger("safe_anthropic")
 import anthropic as original_anthropic
 
 # Создаем безопасную версию Anthropic
-class SafeAnthropic(original_anthropic.Anthropic):
+class SafeAnthropic:
     """
     Безопасная версия класса Anthropic, которая удаляет параметр proxies
     перед вызовом оригинального конструктора.
     """
-    def __init__(self, *args, **kwargs):
-        logger.info(f"Initializing SafeAnthropic with kwargs: {kwargs}")
+    def __init__(self, api_key=None, **kwargs):
+        logger.info(f"Initializing SafeAnthropic with api_key and {len(kwargs)} additional kwargs")
         
         # Удаляем параметр proxies, если он присутствует
-        proxies_value = None
         if 'proxies' in kwargs:
-            logger.info(f"Removing proxies parameter: {kwargs['proxies']}")
-            proxies_value = kwargs.pop('proxies')
+            logger.info(f"Removing proxies parameter")
+            del kwargs['proxies']
         
-        # Получаем сигнатуру родительского метода
-        orig_sig = inspect.signature(original_anthropic.Anthropic.__init__)
-        valid_params = set(orig_sig.parameters.keys())
-        
-        # Удаляем все параметры, которых нет в сигнатуре или которые вызывают ошибки
-        known_problematic_params = {'proxies'}  # параметры, которые есть в сигнатуре, но вызывают ошибки
-        filtered_kwargs = {}
-        
-        for key, value in kwargs.items():
-            # Не добавляем известные проблемные параметры и неизвестные параметры
-            if key in known_problematic_params:
-                logger.info(f"Skipping known problematic parameter: {key}={value}")
-                continue
-            if key not in valid_params and key != 'self':
-                logger.info(f"Skipping unknown parameter: {key}={value}")
-                continue
-            filtered_kwargs[key] = value
-        
-        logger.info(f"Calling original __init__ with filtered kwargs: {filtered_kwargs}")
-        
-        # Вызываем оригинальный конструктор с очищенными параметрами
+        # Создаем реальный Anthropic клиент
         try:
-            super().__init__(*args, **filtered_kwargs)
-            logger.info(f"SafeAnthropic initialized successfully")
-        except TypeError as e:
-            # Если все еще возникают ошибки, логируем и пытаемся решить
-            logger.error(f"TypeError in SafeAnthropic.__init__: {e}")
-            logger.error(f"Original args: {args}")
-            logger.error(f"Filtered kwargs: {filtered_kwargs}")
-            logger.error(f"Original signature: {orig_sig}")
-            
-            # Создаем минимальный набор параметров
-            minimal_kwargs = {}
-            if 'api_key' in filtered_kwargs:
-                minimal_kwargs['api_key'] = filtered_kwargs['api_key']
-            
-            logger.info(f"Trying with minimal kwargs: {minimal_kwargs}")
-            super().__init__(*args, **minimal_kwargs)
-            logger.info(f"SafeAnthropic initialized successfully with minimal parameters")
+            self.client = original_anthropic.Anthropic(api_key=api_key)
+            logger.info(f"Original Anthropic client created successfully")
+        except Exception as e:
+            logger.error(f"Error creating Anthropic client: {e}")
+            raise
+    
+    # Делегируем все вызовы к реальному клиенту
+    def __getattr__(self, name):
+        return getattr(self.client, name)
 
 # Функция для создания клиентов без proxies
 def create_client(api_key=None):
@@ -82,8 +53,28 @@ def create_client(api_key=None):
     if api_key is None:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
     
+    if not api_key:
+        logger.error("API key not provided and not found in environment variables")
+        raise ValueError("API key is required")
+    
     logger.info(f"Creating client with SafeAnthropic")
     return SafeAnthropic(api_key=api_key)
+
+# Применяем прямой патч к оригинальному классу
+original_init = original_anthropic.Anthropic.__init__
+
+def patched_init(self, *args, **kwargs):
+    # Удаляем проблемный параметр proxies
+    if 'proxies' in kwargs:
+        logger.info(f"Removing proxies from Anthropic.__init__")
+        del kwargs['proxies']
+    
+    # Вызываем оригинальный инициализатор
+    return original_init(self, *args, **kwargs)
+
+# Патчим оригинальный класс
+original_anthropic.Anthropic.__init__ = patched_init
+logger.info("Patched original_anthropic.Anthropic.__init__ to remove proxies parameter")
 
 # Экспортируем безопасный класс
 Anthropic = SafeAnthropic
@@ -99,8 +90,8 @@ if hasattr(original_anthropic, 'Client'):
     
     def patched_client_init(self, *args, **kwargs):
         if 'proxies' in kwargs:
-            logger.info(f"Removing proxies from Client initialization: {kwargs['proxies']}")
-            kwargs.pop('proxies')
+            logger.info(f"Removing proxies from Client initialization")
+            del kwargs['proxies']
         return original_client_init(self, *args, **kwargs)
     
     original_anthropic.Client.__init__ = patched_client_init
