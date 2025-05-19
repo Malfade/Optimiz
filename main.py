@@ -14,108 +14,63 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Очищаем переменные окружения прокси
+# КРИТИЧЕСКИ ВАЖНО: Очищаем переменные окружения прокси
 # Railway автоматически добавляет эти переменные, что вызывает ошибки
-for env_var in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']:
+proxy_env_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']
+saved_proxies = {}
+
+for env_var in proxy_env_vars:
     if env_var in os.environ:
-        logger.info(f"Удаляем переменную окружения {env_var}")
+        saved_proxies[env_var] = os.environ[env_var]
+        logger.info(f"Удаляем переменную окружения {env_var}: {os.environ[env_var]}")
         del os.environ[env_var]
 
-# Применяем патч для Railway перед импортом anthropic
-if os.environ.get('RAILWAY_ENVIRONMENT') is not None:
-    logger.info("Обнаружена среда Railway, применяем патч для anthropic")
-    try:
-        # Сначала загружаем патч для решения проблемы с proxies
-        import fix_railway_anthropic
-        logger.info("Патч для Railway успешно загружен")
-    except Exception as e:
-        logger.error(f"Ошибка при загрузке патча для Railway: {e}")
+logger.info(f"Удалены переменные прокси: {saved_proxies}")
 
-# Пытаемся импортировать anthropic с несколькими резервными вариантами
-anthropic = None
-import_errors = []
-
-# Попытка 1: Используем нашу самую надежную резервную реализацию
+# ИСПОЛЬЗУЕМ ТОЛЬКО FALLBACK РЕАЛИЗАЦИЮ
+# Игнорируем все другие варианты (safe_anthropic, anthropic_wrapper и оригинальную библиотеку)
 try:
-    logger.info("Пытаемся использовать fallback_anthropic")
-    import fallback_anthropic as anthropic
-    logger.info("✅ Импортирована резервная версия fallback_anthropic")
-    # Проверим, действительно ли она работает
+    logger.info("▶️ ИСПОЛЬЗУЕМ ТОЛЬКО FALLBACK_ANTHROPIC - САМЫЙ НАДЕЖНЫЙ ВАРИАНТ")
+    
+    # Подменяем модуль anthropic на наш fallback_anthropic
+    import fallback_anthropic
+    sys.modules['anthropic'] = fallback_anthropic
+    import anthropic
+    
+    # Проверим, действительно ли работает
+    logger.info("🔍 Проверяем работоспособность fallback_anthropic...")
     test_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    logger.info("✅ Тестовый клиент fallback_anthropic успешно создан!")
+    logger.info(f"✅ Клиент успешно создан! {test_client.__class__.__name__}")
+    
+    # Вторая проверка
+    try:
+        test_message = test_client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=10,
+            messages=[{"role": "user", "content": "Hello!"}]
+        )
+        logger.info(f"✅✅ ТЕСТОВОЕ СООБЩЕНИЕ УСПЕШНО ОТПРАВЛЕНО! {test_message.content[0].text[:20] if test_message.content else 'Нет контента'}")
+    except Exception as msg_error:
+        logger.error(f"❌ Ошибка при отправке тестового сообщения: {msg_error}")
+    
+    logger.info("✅✅✅ FALLBACK ANTHROPIC УСПЕШНО ИНИЦИАЛИЗИРОВАН")
 except Exception as e:
-    import_errors.append(f"Ошибка fallback_anthropic: {e}")
-    logger.warning(f"Не удалось использовать fallback_anthropic: {e}")
-    anthropic = None
-
-# Попытка 2: Используем безопасную обертку
-if anthropic is None:
-    try:
-        logger.info("Пытаемся использовать safe_anthropic")
-        import safe_anthropic as anthropic
-        logger.info("✅ Импортирована безопасная версия safe_anthropic")
-        # Проверим, действительно ли она работает
-        test_client = anthropic.create_client(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        logger.info("✅ Тестовый клиент safe_anthropic успешно создан!")
-    except Exception as e:
-        import_errors.append(f"Ошибка safe_anthropic: {e}")
-        logger.warning(f"Не удалось использовать safe_anthropic: {e}")
-        anthropic = None
-
-# Попытка 3: Используем другую обертку
-if anthropic is None:
-    try:
-        logger.info("Пытаемся использовать anthropic_wrapper")
-        import anthropic_wrapper as anthropic
-        logger.info("✅ Импортирована обертка anthropic_wrapper")
-        # Проверим, действительно ли она работает
-        if hasattr(anthropic, 'create_client'):
-            test_client = anthropic.create_client(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        else:
-            test_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        logger.info("✅ Тестовый клиент anthropic_wrapper успешно создан!")
-    except Exception as e:
-        import_errors.append(f"Ошибка anthropic_wrapper: {e}")
-        logger.warning(f"Не удалось использовать anthropic_wrapper: {e}")
-        anthropic = None
-
-# Попытка 4: Используем оригинальную библиотеку как последнее средство
-if anthropic is None:
-    try:
-        logger.info("Пытаемся использовать оригинальную библиотеку anthropic")
-        import anthropic
-        logger.info("✅ Импортирована оригинальная библиотека anthropic")
-        # Проверим, действительно ли она работает
-        test_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        logger.info("✅ Тестовый клиент оригинальной библиотеки успешно создан!")
-    except Exception as e:
-        import_errors.append(f"Ошибка оригинального anthropic: {e}")
-        logger.warning(f"Не удалось использовать оригинальную библиотеку anthropic: {e}")
-        anthropic = None
-
-# Проверяем, импортировали ли мы хоть какую-то версию anthropic
-if anthropic is None:
-    error_msg = "Не удалось импортировать ни одну из версий anthropic. Ошибки:\n" + "\n".join(import_errors)
-    logger.critical(error_msg)
+    logger.critical(f"❌❌❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ИНИЦИАЛИЗАЦИИ FALLBACK_ANTHROPIC: {e}")
     sys.exit(1)
-else:
-    logger.info(f"Успешно импортирован: {anthropic.__name__}, версия: {getattr(anthropic, '__version__', 'unknown')}")
-
-# Сообщаем системе, что мы будем использовать эту версию anthropic
-sys.modules['anthropic'] = anthropic
 
 # Теперь импортируем основной файл бота
 try:
+    logger.info("🔄 Импортируем основной файл optimization_bot...")
     from optimization_bot import main
-    logger.info("Успешно импортирован основной файл optimization_bot")
+    logger.info("✅ Успешно импортирован основной файл optimization_bot")
 except Exception as e:
-    logger.critical(f"Ошибка при импорте основного файла бота: {e}")
+    logger.critical(f"❌ Ошибка при импорте основного файла бота: {e}")
     sys.exit(1)
 
 if __name__ == "__main__":
-    logger.info("Запуск бота оптимизации Windows...")
+    logger.info("🚀 Запуск бота оптимизации Windows...")
     try:
         main()
     except Exception as e:
-        logger.critical(f"Критическая ошибка при запуске бота: {e}")
-        sys.exit(1) 
+        logger.critical(f"❌ Критическая ошибка при запуске бота: {e}")
+        sys.exit(1)
