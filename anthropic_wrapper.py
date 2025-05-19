@@ -13,15 +13,33 @@ import sys
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("anthropic_wrapper")
 
+# Определение переменных для экспорта
+Client = None
+Anthropic = None
+
 # Попытка импорта безопасной версии, если уже существует
 try:
     import safe_anthropic
     logger.info("Импортирован безопасный модуль safe_anthropic")
-    anthropic = safe_anthropic
+    
+    # Экспортируем основные классы и функции
+    Anthropic = safe_anthropic.Anthropic
+    Client = safe_anthropic.Client if hasattr(safe_anthropic, 'Client') else None
+    
+    # Проверяем, что класс действительно доступен
+    if not Anthropic:
+        logger.warning("Класс Anthropic не найден в safe_anthropic, попробуем импортировать напрямую")
+        # Пытаемся получить класс напрямую
+        import anthropic as original_anthropic
+        Anthropic = original_anthropic.Anthropic
+        Client = original_anthropic.Client if hasattr(original_anthropic, 'Client') else None
+        
 except ImportError:
     # Если safe_anthropic не найден, используем оригинальный модуль с патчем
     try:
         import anthropic as original_anthropic
+        logger.info("Импортирован оригинальный модуль anthropic")
+        
         # Сохраняем копию оригинального класса
         _original_anthropic_class = original_anthropic.Anthropic
         
@@ -40,7 +58,11 @@ except ImportError:
         
         # Заменяем оригинальный класс на наш безопасный
         original_anthropic.Anthropic = SafeAnthropicWrapper
-        anthropic = original_anthropic
+        Anthropic = SafeAnthropicWrapper
+        
+        # Экспортируем Client, если он существует
+        Client = original_anthropic.Client if hasattr(original_anthropic, 'Client') else None
+        
         logger.info("Создана безопасная обертка для Anthropic")
     except ImportError:
         logger.error("Не удалось импортировать ни safe_anthropic, ни оригинальный модуль anthropic")
@@ -61,7 +83,17 @@ def create_client(api_key=None):
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
     
     logger.info("Создание клиента Anthropic через безопасную обертку")
-    return anthropic.Anthropic(api_key=api_key)
+    
+    # Проверяем наличие класса
+    if not Anthropic:
+        raise ImportError("Класс Anthropic не найден, инициализация не удалась")
+    
+    try:
+        # Создаем клиент без параметра proxies
+        return Anthropic(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Ошибка при создании клиента: {e}")
+        raise
 
 # Версия библиотеки
 try:
@@ -70,10 +102,11 @@ try:
     logger.info(f"Версия библиотеки anthropic: {anthropic_version}")
 except Exception as e:
     logger.warning(f"Не удалось определить версию библиотеки anthropic: {e}")
+    anthropic_version = "unknown"
 
 # Проверяем, загружен ли модуль успешно
-if anthropic:
-    logger.info("Антропик обертка успешно инициализирована")
+if Anthropic:
+    logger.info(f"Антропик обертка успешно инициализирована (класс: {Anthropic.__name__})")
     print("[ANTHROPIC WRAPPER] Безопасная обертка для библиотеки Anthropic успешно инициализирована!")
 else:
     logger.error("Не удалось инициализировать антропик обертку")

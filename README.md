@@ -46,28 +46,23 @@ cd bot_optimixation && python optimization_bot.py
 
 ## Деплой на Railway
 
-Для деплоя бота на платформу Railway существует два способа:
+Для деплоя бота на платформу Railway доступна подробная документация:
 
-### Способ 1: Деплой через GitHub
-Если ваш проект уже загружен в репозиторий GitHub:
+- [Инструкции по деплою на Railway (рус)](RAILWAY_DEPLOY.md) - полное руководство на русском языке
+- [Railway Deployment Guide (eng)](RAILWAY_DEPLOY_EN.md) - complete guide in English
+- [Быстрое решение проблемы с proxies](PROXIES_ISSUE_QUICKFIX.md) - быстрое исправление ошибки с параметром proxies
+
+### Краткая инструкция:
+
 1. Создайте аккаунт на [Railway](https://railway.app/)
-2. Нажмите "New Project" → "Deploy from GitHub repo"
-3. Выберите ваш репозиторий с ботом
-4. Настройте переменные окружения в разделе "Variables"
-
-### Способ 2: Деплой без GitHub
-Если вы хотите деплоить проект напрямую, без привязки к GitHub:
-1. Отвяжите проект от Git, запустив скрипт:
-   - В Windows: `clean_git.bat`
-   - В Linux/Mac: `clean_git.sh`
-2. Установите CLI Railway: `npm i -g @railway/cli`
-3. Войдите в аккаунт: `railway login`
-4. Создайте новый пустой проект на Railway через веб-интерфейс
-5. Свяжите локальную директорию с проектом: `railway link`
-6. Настройте переменные окружения
-7. Выполните деплой: `railway up`
-
-Подробные инструкции по деплою смотрите в файле `DEPLOY_RAILWAY.md`.
+2. Загрузите проект одним из способов:
+   - **Через GitHub**: New Project → Deploy from GitHub repo
+   - **Напрямую**: Используйте Railway CLI (`npm i -g @railway/cli`)
+3. Настройте переменные окружения (`TELEGRAM_TOKEN`, `ANTHROPIC_API_KEY`)
+4. Убедитесь, что файл `railway.json` содержит правильную команду запуска:
+   ```json
+   "startCommand": "python safe_anthropic.py && python optimization_bot.py"
+   ```
 
 ## Функции бота
 
@@ -112,13 +107,28 @@ python optimization_bot.py
    - Для откатов оптимизаций можно использовать точки восстановления системы
    - Резервные копии создаются в папке `%USERPROFILE%\WindowsOptimizer_Backups` 
 
-## Исправление для Railway
+## Исправление проблемы с proxies в Railway
 
-Если вы столкнулись с ошибкой `__init__() got an unexpected keyword argument 'proxies'` при деплое на Railway, эта ошибка была исправлена следующим образом:
+Если вы столкнулись с ошибкой `__init__() got an unexpected keyword argument 'proxies'` при деплое на Railway, мы реализовали несколько подходов к решению этой проблемы:
 
-1. Создана специальная обертка `anthropic_wrapper.py`, которая безопасно обрабатывает параметр `proxies`.
-2. Изменен импорт в `optimization_bot.py` для использования этой обертки вместо оригинального модуля.
-3. Обновлен файл `railway.json` для запуска `anthropic_wrapper.py` перед основным скриптом бота.
-4. Изменена инициализация API клиента с использованием функции `create_client()` из обертки.
+### Решение 1: Прямое исправление (Рекомендуется)
 
-Эти изменения гарантированно обеспечивают удаление параметра `proxies` при инициализации API клиента Anthropic, даже если Railway или другое окружение пытается его автоматически добавить.
+Этот метод патчит библиотеку Anthropic на самом низком уровне, модифицируя базовый HTTP клиент:
+
+1. Создан файл `safe_anthropic.py`, который патчит класс `SyncHttpxClientWrapper` в Anthropic API
+2. Обновлен файл `railway.json` для запуска `safe_anthropic.py` перед основным скриптом бота
+
+Для быстрого решения проблемы используйте инструкции в файле [PROXIES_ISSUE_QUICKFIX.md](PROXIES_ISSUE_QUICKFIX.md).
+
+### Решение 2: Обертки для Anthropic API
+
+Дополнительно реализованы две обертки для Anthropic API:
+
+1. `safe_anthropic.py` - базовая обертка, которая перехватывает параметр `proxies`
+2. `anthropic_wrapper.py` - расширенная обертка с дополнительной обработкой ошибок
+
+### Тестирование фиксов
+
+Для проверки работоспособности всех методов создан файл `test_all_fixes.py`, который тестирует каждый подход по отдельности и в комбинации.
+
+Наиболее надежным решением является использование обертки `safe_anthropic.py`.

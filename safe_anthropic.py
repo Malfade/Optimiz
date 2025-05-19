@@ -30,7 +30,13 @@ class SafeAnthropic(original_anthropic.Anthropic):
             del kwargs['proxies']
         
         # Вызываем оригинальный конструктор
-        super().__init__(*args, **kwargs)
+        try:
+            super().__init__(*args, **kwargs)
+        except TypeError as e:
+            # Если всё ещё возникает ошибка с аргументами, логируем её и пробрасываем
+            logger.error(f"Ошибка при инициализации Anthropic: {e}")
+            logger.error(f"Аргументы: args={args}, kwargs={kwargs}")
+            raise
 
 # Заменяем оригинальный класс на наш безопасный
 original_anthropic.Anthropic = SafeAnthropic
@@ -43,10 +49,18 @@ def create_client(api_key=None):
     if api_key is None:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
     
-    return SafeAnthropic(api_key=api_key)
+    try:
+        return SafeAnthropic(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Ошибка при создании клиента: {e}")
+        raise
 
 # Экспортируем имя класса
 Anthropic = SafeAnthropic
+
+# Также экспортируем другие полезные классы
+Client = original_anthropic.Client if hasattr(original_anthropic, 'Client') else None
+messages = original_anthropic.messages if hasattr(original_anthropic, 'messages') else None
 
 # Сообщаем о успешной инициализации
 logger.info("SafeAnthropic: Модуль успешно инициализирован")
