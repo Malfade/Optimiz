@@ -2241,52 +2241,35 @@ def cmd_subscription(message):
             
         # Получаем информацию о подписке
         subscription_active = check_user_subscription(message.chat.id)
-        subscription_info = get_subscription_info(message.chat.id)
         
-        if subscription_active and subscription_info:
-            # Формируем сообщение для активной подписки
+        # Создаем inline-кнопку для перехода к мини-приложению
+        markup = types.InlineKeyboardMarkup()
+        url_button = types.InlineKeyboardButton(
+            text="💳 Открыть мини-приложение", 
+            web_app=types.WebAppInfo(url="https://t.me/OptimizatorBot/app")
+        )
+        markup.add(url_button)
+        
+        if subscription_active:
+            # Получаем данные о подписке
+            subscription_info = get_subscription_info(message.chat.id)
             days_left = subscription_info.get("days_left", 0)
             plan_name = subscription_info.get("plan_name", "Стандартный")
-            created_at = subscription_info.get("created_at_formatted", "Неизвестно")
-            expires_at = subscription_info.get("expires_at_formatted", "Неизвестно")
             
-            sub_text = f"""
-*Информация о подписке*
-
-✅ *Статус:* Активна
-📦 *План:* {plan_name}
-📆 *Дата активации:* {created_at}
-🗓️ *Действует до:* {expires_at}
-⏱️ *Осталось дней:* {days_left}
-
-Все функции бота доступны. Спасибо за поддержку!
-"""
-            bot.send_message(message.chat.id, sub_text, parse_mode="Markdown")
-        else:
-            # Создаем inline-кнопку для перехода к оплате
-            markup = types.InlineKeyboardMarkup()
-            url_button = types.InlineKeyboardButton(
-                text="💳 Оформить подписку", 
-                url="https://t.me/OptimizatorBot/app"  # URL к мини-приложению оплаты
+            # Отправляем краткую информацию с кнопкой
+            bot.send_message(
+                message.chat.id, 
+                f"✅ У вас активна подписка *{plan_name}* (осталось дней: {days_left}).\n\nДля управления подпиской нажмите кнопку ниже:",
+                parse_mode="Markdown",
+                reply_markup=markup
             )
-            markup.add(url_button)
-            
-            # Формируем сообщение для неактивной подписки
-            sub_text = """
-*Информация о подписке*
-
-❌ *Статус:* Отсутствует
-⚠️ *Доступ:* Ограничен
-
-*Почему стоит оформить подписку:*
-• Полный доступ ко всем функциям бота
-• Создание скриптов оптимизации без ограничений
-• Исправление ошибок в скриптах
-• Возможность сохранять и использовать скрипты
-
-Нажмите на кнопку ниже, чтобы оформить подписку:
-"""
-            bot.send_message(message.chat.id, sub_text, parse_mode="Markdown", reply_markup=markup)
+        else:
+            # Отправляем только кнопку для оформления подписки
+            bot.send_message(
+                message.chat.id,
+                "Для оформления подписки нажмите кнопку ниже:",
+                reply_markup=markup
+            )
         
         logger.info(f"Пользователь {message.chat.id} запросил информацию о подписке")
     except Exception as e:
