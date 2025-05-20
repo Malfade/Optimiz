@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оформление подписки</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* Основные стили */
+        :root {
+            --tg-theme-bg-color: #ffffff;
+            --tg-theme-text-color: #222222;
+            --tg-theme-hint-color: #999999;
+            --tg-theme-link-color: #2481cc;
+            --tg-theme-button-color: #2481cc;
+            --tg-theme-button-text-color: #ffffff;
+            --accent-color: #2481cc;
+            --border-radius: 12px;
+        }
+
+        /* Адаптация к теме Telegram */
+        body {
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #222222);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* Заголовок */
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: var(--tg-theme-hint-color, #999999);
+            margin-top: 0;
+        }
+
+        .user-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        /* Карточки подписок */
+        #plans {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .plan-card {
+            background-color: rgba(0, 0, 0, 0.05);
+            border-radius: var(--border-radius);
+            padding: 16px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .plan-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .plan-card h3 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .plan-card .price {
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin: 8px 0;
+        }
+
+        .plan-card .description {
+            color: var(--tg-theme-hint-color, #999999);
+            margin-bottom: 16px;
+        }
+
+        /* Кнопки */
+        button, .button {
+            background-color: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: var(--border-radius);
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        button:hover, .button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled, .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Модальные окна */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal-content {
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Индикатор загрузки */
+        .loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 0;
+        }
+
+        .loader-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Сообщение об ошибке */
+        #errorMessage {
+            background-color: rgba(255, 0, 0, 0.1);
+            color: #d00;
+            padding: 12px;
+            border-radius: var(--border-radius);
+            margin-bottom: 16px;
+        }
+
+        /* Дополнительные опции */
+        .action-link {
+            display: block;
+            text-align: center;
+            margin: 16px 0;
+            color: var(--tg-theme-link-color, #2481cc);
+            text-decoration: none;
+        }
+
+        /* Форма оплаты */
+        #payment-form {
+            margin-top: 20px;
+            min-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Заголовок и приветствие -->
+    <div class="header">
+        <h1>Оформление подписки</h1>
+        <p>Выберите подходящий тарифный план</p>
+    </div>
+    
+    <!-- Информация о пользователе -->
+    <div class="user-info">
+        <p>Привет, <span id="userName">Пользователь</span>!</p>
+    </div>
+    
+    <!-- Сообщение об ошибке (скрыто по умолчанию) -->
+    <div id="errorMessage" class="hidden"></div>
+    
+    <!-- Индикатор загрузки (скрыт по умолчанию) -->
+    <div id="loader" class="hidden">
+        <div class="loader-spinner"></div>
+    </div>
+    
+    <!-- Контейнер для карточек подписок -->
+    <div id="plans"></div>
+    
+    <!-- Кнопка ручной проверки платежа (скрыта по умолчанию) -->
+    <button id="checkPaymentButton" class="hidden">Я уже оплатил, но не вижу подтверждения</button>
+    
+    <!-- Модальное окно для формы оплаты -->
+    <div id="paymentModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="modal-title">Оплата подписки</h2>
+            <div id="payment-form"></div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно успешной оплаты -->
+    <div id="successModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="modal-title">Подписка активирована!</h2>
+            <p>Ваша подписка успешно активирована. Теперь вы можете использовать все функции бота.</p>
+            <div class="modal-buttons">
+                <button id="closeSuccess">Закрыть</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Подключение скрипта -->
+    <script src="script.js"></script>
+</body>
+</html> 

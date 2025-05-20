@@ -2267,7 +2267,7 @@ def cmd_subscription(message):
             markup = types.InlineKeyboardMarkup()
             url_button = types.InlineKeyboardButton(
                 text="💳 Оформить подписку", 
-                url="https://t.me/optimization_payment_bot/app"  # URL к мини-приложению оплаты
+                url="https://t.me/OptimizatorBot/app"  # URL к мини-приложению оплаты
             )
             markup.add(url_button)
             

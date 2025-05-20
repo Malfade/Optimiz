@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Настройка CORS для запросов с фронтенда
 app.use(cors());
@@ -21,19 +21,13 @@ const orders = {};
 // Инициализация ЮKassa
 // ВНИМАНИЕ: В реальном приложении эти данные должны храниться в безопасном месте (env переменные)
 const shopId = '1086529'; // Ваш идентификатор магазина ЮKassa
-const secretKey = 'test_fItob0t2XOZPQETIa7npqoKf5PsxbXlrMTHV88P4WZA'; // ВАЖНО: Замените на ваш секретный ключ из личного кабинета ЮKassa
-
-// Для боевого режима замените на данные вашего магазина:
-// const shopId = '1053058'; // Ваш идентификатор магазина ЮKassa
-//const secretKey = 'live_Zf5IzprxpE7PWU-PGJQ7GRzLRo39oL4Wg2__QMKWZt4'; // ВАЖНО: Замените на ваш секретный ключ из личного кабинета ЮKassa
-
-
-let yooKassa = null;
+const secretKey = 'test_fItob0t2XOZPQETIa7npqoKf5PsxbXlrMTHV88P4WZA'; // Тестовый ключ ЮKassa
 
 // Режим работы (true - тестовый, false - боевой)
 const isTestMode = true;
 
 // Инициализация клиента ЮKassa
+let yooKassa = null;
 try {
     const YooKassa = require('yookassa');
     yooKassa = new YooKassa({
@@ -51,28 +45,32 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Маршрут для создания платежа в ЮKassa
+// Маршрут для создания платежа
 app.post('/api/create-payment', async (req, res) => {
     console.log('Получен запрос на создание платежа:', req.body);
     
     try {
-        const { amount, description, userId, planName, email } = req.body;
-
-        // Создаем безопасный fallback для userId, если он не передан
-        const safeUserId = userId || `anonymous_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        // Получаем данные из запроса
+        const { amount, plan, userId, description, return_url, email } = req.body;
         
-        // Проверяем email для чека
-        const safeEmail = email && email.includes('@') ? email : 'customer@example.com';
-
-        if (!amount) {
-            console.error('Не указана сумма платежа:', req.body);
-            return res.status(400).json({ error: 'Не указана сумма платежа' });
+        // Проверяем обязательные параметры
+        if (!amount || !userId) {
+            return res.status(400).json({ 
+                error: 'Отсутствуют обязательные параметры (amount, userId)' 
+            });
         }
-
-        // Проверка доступности YooKassa API
+        
+        // Безопасные значения для параметров
+        const safeAmount = parseFloat(amount) || 100; // По умолчанию 100 рублей
+        const planName = plan || 'Стандартный';
+        const safeUserId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '');
+        const safeEmail = email || 'user@example.com';
+        
+        // Проверяем, инициализирован ли клиент ЮKassa
         if (!yooKassa) {
-            console.error('YooKassa API не инициализирован');
-            return res.status(500).json({ error: 'Сервис оплаты недоступен', details: 'API не инициализирован' });
+            return res.status(500).json({ 
+                error: 'Сервер оплаты не настроен' 
+            });
         }
 
         try {
@@ -82,20 +80,20 @@ app.post('/api/create-payment', async (req, res) => {
                 Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
             
             console.log('Создаем платеж в ЮKassa с параметрами:', {
-                amount, description, idempotenceKey, safeUserId, isTestMode, email: safeEmail
+                amount: safeAmount, description, idempotenceKey, safeUserId, isTestMode, email: safeEmail
             });
             
             // Настраиваем параметры платежа
             const paymentParams = {
                 amount: {
-                    value: amount,
+                    value: safeAmount,
                     currency: 'RUB'
                 },
                 capture: true, // Автоматически принимать поступившие средства
-                description: description || `Подписка ${planName || 'на бота'}`,
+                description: description || `Подписка ${planName} для пользователя ${safeUserId}`,
                 metadata: {
                     userId: safeUserId,
-                    planName: planName || 'Стандарт'
+                    planName: planName
                 }
             };
 
@@ -104,7 +102,7 @@ app.post('/api/create-payment', async (req, res) => {
                 // В тестовом режиме используем redirect для надежности
                 paymentParams.confirmation = {
                     type: 'redirect',
-                    return_url: `${req.protocol}://${req.get('host')}?success=true`
+                    return_url: return_url || `${req.protocol}://${req.get('host')}?success=true`
                 };
             } else {
                 // В боевом режиме используем embedded
@@ -120,9 +118,9 @@ app.post('/api/create-payment', async (req, res) => {
                     },
                     items: [
                         {
-                            description: `Подписка "${planName || 'Стандарт'}"`,
+                            description: `Подписка "${planName}"`,
                             amount: {
-                                value: amount,
+                                value: safeAmount,
                                 currency: "RUB"
                             },
                             vat_code: 1, // НДС 20%
@@ -141,8 +139,8 @@ app.post('/api/create-payment', async (req, res) => {
             orders[payment.id] = {
                 status: payment.status,
                 userId: safeUserId,
-                amount: amount,
-                planName: planName || 'Стандарт',
+                amount: safeAmount,
+                planName: planName,
                 createdAt: new Date(),
                 email: safeEmail
             };
@@ -152,132 +150,97 @@ app.post('/api/create-payment', async (req, res) => {
             
             // Подготавливаем ответ клиенту
             const response = {
-                orderId: payment.id,
+                order_id: payment.id,
                 status: payment.status,
-                amount: amount,
+                amount: safeAmount,
                 testMode: isTestMode
             };
 
             // Добавляем конфирмацию в зависимости от типа
             if (isTestMode) {
-                response.redirectUrl = payment.confirmation.confirmation_url;
+                response.confirmation_url = payment.confirmation.confirmation_url;
             } else {
-                response.confirmationToken = payment.confirmation.confirmation_token;
+                response.confirmation_token = payment.confirmation.confirmation_token;
             }
             
             // Отправляем клиенту информацию о платеже
             return res.json(response);
         } catch (yooKassaError) {
             console.error('Ошибка при создании платежа в ЮKassa:', yooKassaError);
-            
-            // Логируем детальную информацию об ошибке
-            console.error('Детали ошибки YooKassa:', 
-                JSON.stringify(yooKassaError.response || yooKassaError.message || yooKassaError));
-            
-            // Проверяем специфические ошибки YooKassa
-            const errorMessage = yooKassaError.response?.description || 
-                                yooKassaError.message || 
-                                'Ошибка сервиса оплаты';
-            
-            // Если это ошибка авторизации, возвращаем более точное сообщение
-            if (errorMessage.includes('authentication') || 
-                errorMessage.includes('auth') || 
-                errorMessage.includes('unauthorized') ||
-                yooKassaError.response?.code === 401) {
-                return res.status(500).json({ 
-                    error: 'Ошибка авторизации в платежной системе', 
-                    details: errorMessage
-                });
-            }
-            
-            // Если это проблема с магазином, возвращаем соответствующее сообщение
-            if (errorMessage.includes('shop') || errorMessage.includes('account')) {
-                return res.status(500).json({ 
-                    error: 'Проблема с настройками магазина в платежной системе', 
-                    details: errorMessage
-                });
-            }
-            
-            // Если это проблема с чеком, возвращаем сообщение о неверных данных для чека
-            if (errorMessage.includes('receipt') || errorMessage.includes('tax')) {
-                return res.status(500).json({ 
-                    error: 'Ошибка в данных для чека', 
-                    details: errorMessage
-                });
-            }
-            
-            // Если другая ошибка, пробуем тестовый режим как запасной вариант
-            console.log('Переключаемся на тестовый режим из-за ошибки...');
-            return createTestPayment(amount, description, safeUserId, planName, res);
+            return res.status(500).json({ 
+                error: 'Ошибка при создании платежа', 
+                details: String(yooKassaError)
+            });
         }
     } catch (error) {
-        console.error('Ошибка при создании платежа:', error);
-        res.status(500).json({ error: 'Не удалось создать платеж', details: error.message });
+        console.error('Внутренняя ошибка сервера при создании платежа:', error);
+        return res.status(500).json({ 
+            error: 'Внутренняя ошибка сервера', 
+            details: String(error)
+        });
     }
 });
 
-// Функция для создания тестового платежа
-function createTestPayment(amount, description, userId, planName, res) {
-    // Генерируем уникальный ID заказа
-    let orderId;
+// Маршрут для проверки статуса платежа
+app.get('/api/payment-status/:orderId', async (req, res) => {
+    const orderId = req.params.orderId;
+    
+    console.log(`Получен запрос на проверку статуса платежа: ${orderId}`);
+    
     try {
-        orderId = 'order_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-    } catch (e) {
-        orderId = 'order_' + Math.random().toString(36).substring(2, 15) + 
-                        Math.random().toString(36).substring(2, 15);
+        // Проверяем, есть ли информация о заказе в нашей "базе данных"
+        if (orders[orderId]) {
+            // Если заказ уже отмечен как успешный в нашей БД
+            if (orders[orderId].status === 'succeeded') {
+                return res.json({ 
+                    status: 'succeeded', 
+                    orderId: orderId
+                });
+            }
+        }
+        
+        // Если заказ не найден или статус не succeeded, делаем запрос к ЮKassa
+        if (yooKassa) {
+            try {
+                // Получаем информацию о платеже от ЮKassa
+                const payment = await yooKassa.getPayment(orderId);
+                
+                // Обновляем статус в нашей "базе данных"
+                if (orders[orderId]) {
+                    orders[orderId].status = payment.status;
+                } else {
+                    // Если заказа нет в нашей БД, создаем запись
+                    orders[orderId] = {
+                        status: payment.status,
+                        createdAt: new Date()
+                    };
+                }
+                
+                // Отправляем статус клиенту
+                return res.json({
+                    status: payment.status,
+                    orderId: orderId
+                });
+            } catch (yooKassaError) {
+                console.error(`Ошибка при получении информации о платеже ${orderId}:`, yooKassaError);
+                return res.status(500).json({ 
+                    error: 'Ошибка при получении информации о платеже', 
+                    details: String(yooKassaError)
+                });
+            }
+        } else {
+            // Если клиент ЮKassa не инициализирован
+            return res.status(500).json({ 
+                error: 'Сервер оплаты не настроен' 
+            });
+        }
+    } catch (error) {
+        console.error(`Внутренняя ошибка сервера при проверке статуса платежа ${orderId}:`, error);
+        return res.status(500).json({ 
+            error: 'Внутренняя ошибка сервера', 
+            details: String(error)
+        });
     }
-    
-    console.log('Создаем тестовый платеж с параметрами:', {
-        orderId, amount, description, userId
-    });
-    
-    // Создаем фейковый токен для тестирования
-    const fakeToken = Buffer.from(JSON.stringify({
-        orderId: orderId,
-        amount: amount,
-        desc: description,
-        time: Date.now()
-    })).toString('base64');
-    
-    // Сохраняем информацию о заказе
-    orders[orderId] = {
-        status: 'pending',
-        userId: userId,
-        amount: amount,
-        planName: planName || 'Стандарт',
-        createdAt: new Date()
-    };
-    
-    console.log('Тестовый платеж создан:', orderId);
-    
-    // Отправляем клиенту информацию о платеже
-    return res.json({
-        orderId: orderId,
-        status: 'pending',
-        confirmationToken: fakeToken,
-        amount: amount,
-        testMode: true // Флаг для фронтенда, что мы в тестовом режиме
-    });
-}
-
-// Маршрут для имитации оплаты (для тестового режима)
-app.post('/api/test-payment', async (req, res) => {
-    const { orderId } = req.body;
-    
-    if (!orderId || !orders[orderId]) {
-        return res.status(400).json({ error: 'Неверный ID заказа' });
-    }
-    
-    console.log(`Имитация успешной оплаты для заказа ${orderId}`);
-    
-    // Обновляем статус заказа
-    orders[orderId].status = 'succeeded';
-    
-    res.json({
-        orderId: orderId,
-        status: 'succeeded',
-        message: 'Тестовая оплата успешно выполнена'
-    });
 });
 
 // Маршрут для webhook от ЮKassa
@@ -298,9 +261,6 @@ app.post('/api/webhook', async (req, res) => {
         
         console.log(`Получено уведомление: ${event} для платежа ${paymentId}`);
         
-        // Проверка аутентичности уведомления (в реальном приложении добавьте проверку подписи)
-        // См. документацию: https://yookassa.ru/developers/using-api/webhooks
-        
         if (event === 'payment.succeeded') {
             // Платеж успешно завершен
             if (orders[paymentId]) {
@@ -316,6 +276,20 @@ app.post('/api/webhook', async (req, res) => {
                     status: 'succeeded',
                     createdAt: new Date()
                 };
+            }
+            
+            // Отправка запроса на webhook Flask для активации подписки
+            try {
+                const userId = orders[paymentId]?.userId;
+                const planName = orders[paymentId]?.planName || 'standard';
+                
+                if (userId) {
+                    // Здесь можно отправить запрос на webhook сервера Flask для активации подписки
+                    const webhookUrl = 'http://localhost:5000/webhook/payment';
+                    console.log(`Отправка уведомления на webhook: ${webhookUrl}, userId: ${userId}, plan: ${planName}`);
+                }
+            } catch (webhookError) {
+                console.error('Ошибка при отправке уведомления на webhook:', webhookError);
             }
         } else if (event === 'payment.canceled') {
             // Платеж отменен
@@ -335,66 +309,6 @@ app.post('/api/webhook', async (req, res) => {
     }
 });
 
-// Маршрут для проверки статуса платежа
-app.get('/api/payment-status/:orderId', async (req, res) => {
-    const { orderId } = req.params;
-    console.log(`Проверка статуса платежа: ${orderId}`);
-    
-    // Если у нас есть YooKassa и orderId не из тестового режима
-    if (yooKassa && !orderId.startsWith('order_')) {
-        try {
-            // Получаем информацию о платеже из API ЮKassa
-            const payment = await yooKassa.getPaymentInfo(orderId);
-            
-            // Обновляем статус в нашей локальной "базе данных"
-            if (orders[orderId]) {
-                orders[orderId].status = payment.status;
-            } else {
-                orders[orderId] = {
-                    status: payment.status,
-                    amount: payment.amount.value,
-                    createdAt: new Date()
-                };
-            }
-            
-            console.log(`Получен статус платежа ${orderId} из ЮKassa: ${payment.status}`);
-            
-            return res.json({
-                orderId: payment.id,
-                status: payment.status,
-                realStatus: true
-            });
-        } catch (error) {
-            console.error('Ошибка при получении информации о платеже из ЮKassa:', error);
-            
-            // Если не удалось получить статус из ЮKassa, проверяем локальный статус
-            if (orders[orderId]) {
-                return res.json({
-                    orderId: orderId,
-                    status: orders[orderId].status,
-                    realStatus: false
-                });
-            } else {
-                return res.status(404).json({ error: 'Заказ не найден' });
-            }
-        }
-    }
-    
-    // Проверяем статус в нашей локальной "базе данных" (для тестового режима)
-    if (orders[orderId]) {
-        console.log(`Получен статус платежа ${orderId} из локальной БД: ${orders[orderId].status}`);
-        
-        return res.json({
-            orderId: orderId,
-            status: orders[orderId].status,
-            realStatus: false
-        });
-    } else {
-        console.log(`Заказ ${orderId} не найден`);
-        return res.status(404).json({ error: 'Заказ не найден' });
-    }
-});
-
 // Маршрут для отладки - сброс хранилища заказов
 app.get('/api/debug/reset-orders', (req, res) => {
     console.log('Сброс хранилища заказов');
@@ -410,7 +324,6 @@ app.get('/api/debug/orders', (req, res) => {
 
 // Запуск сервера
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-    console.log(`Откройте http://localhost:${PORT} в браузере`);
-    console.log(`Режим работы YooKassa: ${isTestMode ? 'ТЕСТОВЫЙ' : 'БОЕВОЙ'}`);
+    console.log(`Сервер монетизации запущен на порту ${PORT}`);
+    console.log(`Основной URL: http://localhost:${PORT}`);
 }); 
