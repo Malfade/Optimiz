@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "python -m venv venv && . venv/bin/activate && pip install -r requirements.txt && npm install" 
+    "builder": "DOCKERFILE",
+    "dockerfile": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "npm start & . venv/bin/activate && python main.py",
     "healthcheckPath": "/",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
