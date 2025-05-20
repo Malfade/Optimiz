@@ -1,0 +1,11 @@
+[phases.setup]
+aptPkgs = ["python3-dev", "python3-pip"]
+
+[phases.build]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python main.py"
+
+[variables]
+PYTHONUNBUFFERED = "1" 
