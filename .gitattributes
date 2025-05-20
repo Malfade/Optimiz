@@ -1,6 +1,8 @@
-* text=auto
+* text=auto eol=lf
 *.js text eol=lf encoding=utf-8
+*.py text eol=lf encoding=utf-8
 *.html text eol=lf encoding=utf-8
 *.css text eol=lf encoding=utf-8
 *.md text eol=lf encoding=utf-8
-*.json text eol=lf encoding=utf-8 
+*.json text eol=lf encoding=utf-8
+*.toml text eol=lf encoding=utf-8 

@@ -1,0 +1,17 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "pip install -r requirements.txt"
+nixpacksConfigPath = ".nixpacks.toml"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[phases]
+cmds = [
+  "mkdir -p /workspace/.railway/plugins",
+  "cd /workspace/.railway/plugins && curl -L -o plugin-python3 https://github.com/railwayapp/nixpacks/releases/download/v1.19.0/plugin-python3 && chmod +x plugin-python3"
+] 
