@@ -1673,19 +1673,25 @@ def check_subscription_before_action(message):
         bool: True, если есть активная подписка или проверка отключена
     """
     if not has_subscription_check:
-        # Если модуль подписок не загружен, разрешаем действие
+        return True  # Если модуль проверки подписок не загружен, пропускаем проверку
+    
+    user_id = message.from_user.id
+    if check_user_subscription(str(user_id)):
         return True
-    
-    # Проверяем подписку
-    subscription_active = check_user_subscription(message.chat.id)
-    
-    # Если подписка не активна, отправляем сообщение
-    if not subscription_active:
+    else:
+        # Создаем кнопку для оплаты через мини-приложение
+        markup = types.InlineKeyboardMarkup()
+        # Получаем ссылку на мини-приложение оплаты
+        payment_url = f"https://t.me/{bot_username}/payment?startapp=user_id_{user_id}"
+        markup.add(types.InlineKeyboardButton(text="💳 Оплатить подписку", web_app=types.WebAppInfo(url=payment_url)))
+        
         bot.send_message(
-            message.chat.id,
-            "⛔ Для использования этой функции требуется активная подписка!\n\n"
-            "Используйте команду /subscription для получения информации о подписке."
+            chat_id=message.chat.id, 
+            text="⚠️ *Ваша подписка не активна*\n\nДля использования всех функций бота необходимо приобрести подписку.", 
+            parse_mode="Markdown",
+            reply_markup=markup
         )
+        return False
     
     return subscription_active
 
@@ -2244,11 +2250,13 @@ def cmd_subscription(message):
         
         # Создаем inline-кнопку для перехода к мини-приложению
         markup = types.InlineKeyboardMarkup()
-        url_button = types.InlineKeyboardButton(
+        
+        # Правильный формат для кнопки WebApp
+        webapp_button = types.InlineKeyboardButton(
             text="💳 Открыть мини-приложение", 
-            web_app=types.WebAppInfo(url="https://t.me/OptimizatorBot/app")
+            web_app={"url": "https://t.me/OptimizatorBot/app"}
         )
-        markup.add(url_button)
+        markup.add(webapp_button)
         
         if subscription_active:
             # Получаем данные о подписке
