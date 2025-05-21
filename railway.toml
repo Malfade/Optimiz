@@ -11,7 +11,8 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 # Переменные окружения для бота
-envs = { PAYMENT_SYSTEM_URL = "${RAILWAY_STATIC_URL_PAYMENT}" }
+port = 8080
+# Railway автоматически создает переменные для связи между сервисами
 
 # Настройка для платежной системы
 [services.payment]
@@ -21,8 +22,9 @@ healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+port = 3001
 # Переменные окружения для платежной системы
-envs = { BOT_API_URL = "${RAILWAY_STATIC_URL_BOT}" }
+# Railway автоматически создает переменные для связи между сервисами
 
 # Общие фазы сборки
 [phases]

@@ -1684,8 +1684,11 @@ def check_subscription_before_action(message):
         # Создаем кнопку для оплаты через мини-приложение
         markup = types.InlineKeyboardMarkup()
         # Создаем URL для мини-приложения оплаты
-        # Используем переменную окружения для определения URL платёжной системы
-        payment_host = os.getenv('PAYMENT_SYSTEM_URL', 'https://localhost:3001')
+        # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
+        # Используем URL сервиса платежной системы в Railway
+        # Переменная RAILWAY_SERVICE_PAYMENT_URL автоматически создаётся Railway
+        default_payment_url = 'https://optimiz-production.up.railway.app'
+        payment_host = os.getenv('RAILWAY_SERVICE_PAYMENT_URL', default_payment_url)
         payment_url = f"{payment_host}/?user_id={user_id}"
         
         # Добавляем кнопку оплаты

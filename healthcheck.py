@@ -7,7 +7,15 @@ import os
 import logging
 import threading
 import time
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+
+# Импортируем функции для работы с подписками
+try:
+    from subscription_check import add_user_subscription, get_subscription_info
+    has_subscription_module = True
+except ImportError:
+    has_subscription_module = False
+    logging.error("Не удалось импортировать модуль подписок в healthcheck.py")
 
 # Конфигурация логирования
 logging.basicConfig(
@@ -53,6 +61,67 @@ def health():
             "python_version": os.getenv("PYTHON_VERSION", "unknown")
         }
     }), 200 if is_healthy else 503
+
+@app.route('/add_subscription', methods=['POST'])
+def add_subscription():
+    """API-эндпоинт для активации подписки после оплаты"""
+    if not has_subscription_module:
+        logger.error("Модуль подписок не доступен, невозможно активировать подписку")
+        return jsonify({
+            "success": False,
+            "message": "Модуль подписок не установлен на сервере"
+        }), 500
+        
+    try:
+        # Получаем данные из запроса
+        data = request.json
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "Отсутствуют данные в запросе"
+            }), 400
+            
+        # Проверяем обязательные поля
+        required_fields = ['user_id', 'plan_name']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    "success": False,
+                    "message": f"Отсутствует обязательное поле: {field}"
+                }), 400
+        
+        # Получаем параметры подписки
+        user_id = data['user_id']
+        plan_name = data['plan_name']
+        duration_days = data.get('duration_days', 30)  # По умолчанию 30 дней
+        payment_id = data.get('payment_id', 'external_payment')
+        
+        # Активируем подписку
+        logger.info(f"Активация подписки для пользователя {user_id}, план: {plan_name}, срок: {duration_days} дней")
+        success = add_user_subscription(user_id, plan_name, duration_days, payment_id)
+        
+        if success:
+            # Получаем информацию о подписке для ответа
+            subscription_info = get_subscription_info(user_id)
+            
+            return jsonify({
+                "success": True,
+                "message": "Подписка успешно активирована",
+                "subscription": subscription_info
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Не удалось активировать подписку"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при активации подписки: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Ошибка при обработке запроса: {str(e)}"
+        }), 500
 
 def update_bot_status(new_status):
     """Функция для обновления статуса бота из основного процесса"""
