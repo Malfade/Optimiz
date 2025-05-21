@@ -1684,8 +1684,9 @@ def check_subscription_before_action(message):
         # Создаем кнопку для оплаты через мини-приложение
         markup = types.InlineKeyboardMarkup()
         # Создаем URL для мини-приложения оплаты
-        # Для WebApp нужно использовать прямой URL на сайт, а не на t.me
-        payment_url = f"https://optimizator-payment-system.vercel.app/?user_id={user_id}"
+        # Используем переменную окружения для определения URL платёжной системы
+        payment_host = os.getenv('PAYMENT_SYSTEM_URL', 'https://localhost:3001')
+        payment_url = f"{payment_host}/?user_id={user_id}"
         
         # Добавляем кнопку оплаты
         payment_button = types.InlineKeyboardButton(

@@ -1,17 +1,35 @@
+# Общие настройки для всего проекта
 [build]
 builder = "NIXPACKS"
-buildCommand = "pip install -r requirements.txt"
-nixpacksConfigPath = ".nixpacks.toml"
 
-[deploy]
+# Настройка для бота (основной сервис)
+[services.bot]
+buildCommand = "pip install -r requirements.txt"
 startCommand = "python main.py"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+# Переменные окружения для бота
+envs = { PAYMENT_SYSTEM_URL = "${RAILWAY_STATIC_URL_PAYMENT}" }
 
+# Настройка для платежной системы
+[services.payment]
+buildCommand = "cd payment_system && npm install"
+startCommand = "cd payment_system && node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# Переменные окружения для платежной системы
+envs = { BOT_API_URL = "${RAILWAY_STATIC_URL_BOT}" }
+
+# Общие фазы сборки
 [phases]
 cmds = [
+  # Установка необходимых утилит для Python
   "mkdir -p /workspace/.railway/plugins",
-  "cd /workspace/.railway/plugins && curl -L -o plugin-python3 https://github.com/railwayapp/nixpacks/releases/download/v1.19.0/plugin-python3 && chmod +x plugin-python3"
-] 
+  "cd /workspace/.railway/plugins && curl -L -o plugin-python3 https://github.com/railwayapp/nixpacks/releases/download/v1.19.0/plugin-python3 && chmod +x plugin-python3",
+  # Установка Node.js и npm, если они не установлены
+  "apt-get update && apt-get install -y nodejs npm"
+]
