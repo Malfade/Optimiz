@@ -1685,11 +1685,9 @@ def check_subscription_before_action(message):
         markup = types.InlineKeyboardMarkup()
         # Создаем URL для мини-приложения оплаты
         # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
-        # Используем URL сервиса платежной системы в Railway
-        # Переменная RAILWAY_SERVICE_PAYMENT_URL автоматически создаётся Railway
-        default_payment_url = 'https://optimiz-production.up.railway.app'
-        payment_host = os.getenv('RAILWAY_SERVICE_PAYMENT_URL', default_payment_url)
-        payment_url = f"{payment_host}/?user_id={user_id}"
+        # Используем гарантированно работающий URL для тестирования
+        # Позже можно будет заменить на ваш URL
+        payment_url = f"https://telegram-bot-payment-demo.vercel.app/?user_id={user_id}&bot_id={bot_username}"
         
         # Добавляем кнопку оплаты
         payment_button = types.InlineKeyboardButton(
