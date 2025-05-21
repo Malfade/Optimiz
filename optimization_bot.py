@@ -1685,9 +1685,8 @@ def check_subscription_before_action(message):
         markup = types.InlineKeyboardMarkup()
         # Создаем URL для мини-приложения оплаты
         # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
-        # Используем гарантированно работающий статический URL для тестирования
-        # Это простая тестовая страница, чтобы проверить функциональность WebApp
-        payment_url = f"https://telegramwebapps.github.io/demo/?user_id={user_id}&botname={bot_username}"
+        # Используем реальный URL платежной системы на Railway
+        payment_url = f"https://paymentsysatem-production.up.railway.app/?user_id={user_id}&bot_username={bot_username}"
         
         # Добавляем кнопку оплаты
         payment_button = types.InlineKeyboardButton(
