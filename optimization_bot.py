@@ -1646,15 +1646,9 @@ def cmd_start(message):
         )
         
         # Проверяем подписку и показываем соответствующее сообщение
+        # Используем обновленную функцию проверки с кнопкой оплаты
         if has_subscription_check:
-            subscription_active = check_user_subscription(message.chat.id)
-            if not subscription_active:
-                # Отправляем сообщение о необходимости подписки
-                bot.send_message(
-                    message.chat.id,
-                    "⚠️ У вас нет активной подписки. Некоторые функции бота ограничены.\n"
-                    "Используйте команду /subscription для получения информации о подписке."
-                )
+            check_subscription_before_action(message)
         
         logger.info(f"Пользователь {message.chat.id} запустил бота")
     except Exception as e:
@@ -1675,6 +1669,14 @@ def check_subscription_before_action(message):
     if not has_subscription_check:
         return True  # Если модуль проверки подписок не загружен, пропускаем проверку
     
+    # Получаем информацию о боте для формирования ссылки на оплату
+    try:
+        bot_info = bot.get_me()
+        bot_username = bot_info.username
+    except Exception as e:
+        logger.error(f"Ошибка при получении информации о боте: {e}")
+        bot_username = "your_bot"  # Запасной вариант
+    
     user_id = message.from_user.id
     if check_user_subscription(str(user_id)):
         return True
@@ -1683,8 +1685,15 @@ def check_subscription_before_action(message):
         markup = types.InlineKeyboardMarkup()
         # Получаем ссылку на мини-приложение оплаты
         payment_url = f"https://t.me/{bot_username}/payment?startapp=user_id_{user_id}"
-        markup.add(types.InlineKeyboardButton(text="💳 Оплатить подписку", web_app=types.WebAppInfo(url=payment_url)))
         
+        # Добавляем кнопку оплаты
+        payment_button = types.InlineKeyboardButton(
+            text="💳 Оплатить подписку", 
+            web_app=types.WebAppInfo(url=payment_url)
+        )
+        markup.add(payment_button)
+        
+        # Отправляем сообщение с кнопкой оплаты
         bot.send_message(
             chat_id=message.chat.id, 
             text="⚠️ *Ваша подписка не активна*\n\nДля использования всех функций бота необходимо приобрести подписку.", 
@@ -1692,8 +1701,6 @@ def check_subscription_before_action(message):
             reply_markup=markup
         )
         return False
-    
-    return subscription_active
 
 # Обработчик для выбора пользователя - модифицируем для проверки подписки
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "main_menu")
