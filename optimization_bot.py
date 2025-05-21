@@ -1685,9 +1685,9 @@ def check_subscription_before_action(message):
         markup = types.InlineKeyboardMarkup()
         # Создаем URL для мини-приложения оплаты
         # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
-        # Используем гарантированно работающий URL для тестирования
-        # Позже можно будет заменить на ваш URL
-        payment_url = f"https://telegram-bot-payment-demo.vercel.app/?user_id={user_id}&bot_id={bot_username}"
+        # Используем гарантированно работающий статический URL для тестирования
+        # Это простая тестовая страница, чтобы проверить функциональность WebApp
+        payment_url = f"https://telegramwebapps.github.io/demo/?user_id={user_id}&botname={bot_username}"
         
         # Добавляем кнопку оплаты
         payment_button = types.InlineKeyboardButton(
