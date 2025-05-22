@@ -8,7 +8,17 @@ import os
 import logging
 import json
 from flask import Flask, request, jsonify
-import threading
+from dotenv import load_dotenv
+import logging
+from subscription_check import SubscriptionManager
+import random
+import string
+
+# Загружаем переменные окружения
+load_dotenv()
+
+# Проверяем режим работы (тестовый или боевой)
+IS_TEST_MODE = os.getenv('TEST_MODE', 'false').lower() == 'true'
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Импортируем модуль проверки подписок
 try:
-    from subscription_check import check_user_subscription, add_user_subscription, get_subscription_info
+    from subscription_check import SubscriptionManager
     has_subscription_check = True
 except ImportError:
     has_subscription_check = False
@@ -70,20 +80,19 @@ def create_payment():
                     'error': f'Отсутствует обязательное поле: {field}'
                 }), 400
         
-        # Создаем платеж через YooKassa
-        # Здесь нужно будет добавить логику создания платежа
-        # Возвращаем ID платежа и URL для оплаты
+        # Проверяем тестовый режим
+        test_result = check_test_mode(data)
+        if test_result:
+            return jsonify(test_result)
+        
+        # В реальном режиме создаем платеж через YooKassa
         return jsonify({
             'success': True,
-            'orderId': 'test_order_123',  # В реальности будет ID от YooKassa
+            'orderId': generate_test_id('order_'),  # В реальности будет ID от YooKassa
             'paymentUrl': 'https://yookassa.ru/payment'  # В реальности будет URL от YooKassa
         })
     except Exception as e:
-        logger.error(f"Ошибка при создании платежа: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return handle_error(e)
 
 @app.route('/api/payment-status/<order_id>', methods=['GET'])
 def get_payment_status(order_id):
@@ -93,19 +102,19 @@ def get_payment_status(order_id):
     try:
         logger.info(f"Получен запрос статуса платежа: {order_id}")
         
-        # Здесь нужно будет добавить логику проверки статуса платежа
-        # Возвращаем статус платежа
+        # Проверяем тестовый режим
+        test_result = check_test_mode({})
+        if test_result:
+            return jsonify(test_result)
+        
+        # В реальном режиме проверяем статус через YooKassa
         return jsonify({
             'success': True,
-            'status': 'succeeded',  # В реальности будет статус от YooKassa
-            'paymentId': 'payment_123'  # В реальности будет ID платежа от YooKassa
+            'status': 'pending',  # В реальности будет статус от YooKassa
+            'paymentId': generate_test_id('payment_')  # В реальности будет ID платежа от YooKassa
         })
     except Exception as e:
-        logger.error(f"Ошибка при получении статуса платежа: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return handle_error(e)
 
 @app.route('/api/activate-subscription', methods=['POST'])
 def activate_subscription():
@@ -124,7 +133,15 @@ def activate_subscription():
                     'error': f'Отсутствует обязательное поле: {field}'
                 }), 400
         
-        # Вызываем функцию добавления подписки
+        # Проверяем тестовый режим
+        if IS_TEST_MODE:
+            # В тестовом режиме всегда активируем подписку успешно
+            return jsonify({
+                'success': True,
+                'message': 'Подписка успешно активирована (тестовый режим)'
+            })
+        
+        # В реальном режиме проверяем подписку через YooKassa
         if has_subscription_check:
             success = add_user_subscription(
                 data['userId'],
@@ -163,11 +180,7 @@ def activate_subscription():
                 'error': 'Модуль проверки подписок недоступен'
             }), 500
     except Exception as e:
-        logger.error(f"Ошибка при активации подписки: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return handle_error(e)
 
 @app.route('/add_subscription', methods=['POST'])
 def add_subscription_api():
