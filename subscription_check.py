@@ -74,12 +74,27 @@ class SubscriptionManager:
         self.active_cache = {}
         current_time = datetime.now().timestamp()
         
+        # Debug log the current time for comparison
+        logger.info(f"[DEBUG] Updating cache at timestamp: {current_time}, formatted: {datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')}")
+        
         for user_id, subscription in self.subscriptions.get("users", {}).items():
+            # Ensure user_id is string
+            user_id = str(user_id)
+            
+            # Debug log for each subscription being processed
+            expires_at = subscription.get("expires_at", 0)
+            status = subscription.get("status")
+            expires_formatted = datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S') if expires_at else "None"
+            
+            logger.info(f"[DEBUG] Processing cache for user {user_id}: status={status}, expires_at={expires_at} ({expires_formatted})")
+            
             # Проверяем, что подписка активна (оплачена и не истекла)
-            if subscription.get("status") == "active" and subscription.get("expires_at", 0) > current_time:
+            if status == "active" and expires_at > current_time:
                 self.active_cache[user_id] = True
+                logger.info(f"[DEBUG] User {user_id} marked as ACTIVE in cache")
             else:
                 self.active_cache[user_id] = False
+                logger.info(f"[DEBUG] User {user_id} marked as INACTIVE in cache: status={status}, expires check: {expires_at > current_time}")
     
     def add_subscription(self, user_id, plan_name, duration_days=30, payment_id=None):
         """
@@ -95,6 +110,10 @@ class SubscriptionManager:
             bool: True, если подписка успешно добавлена
         """
         try:
+            # Ensure user_id is a string
+            user_id = str(user_id)
+            logger.info(f"[DEBUG] Adding subscription for user ID: {user_id}, plan: {plan_name}, duration: {duration_days} days")
+            
             # Создаем записи в структуре, если их еще нет
             if "users" not in self.subscriptions:
                 self.subscriptions["users"] = {}
@@ -105,8 +124,13 @@ class SubscriptionManager:
             # Вычисляем дату окончания подписки
             expires_at = (now + timedelta(days=duration_days)).timestamp()
             
+            # Debug log for the subscription data
+            logger.info(f"[DEBUG] Subscription details: start={now.timestamp()}, expires={expires_at}, "  
+                       f"formatted_start={now.strftime('%Y-%m-%d %H:%M:%S')}, "
+                       f"formatted_end={datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')}")
+            
             # Добавляем информацию о подписке
-            self.subscriptions["users"][str(user_id)] = {
+            self.subscriptions["users"][user_id] = {
                 "plan_name": plan_name,
                 "status": "active",
                 "created_at": now.timestamp(),
@@ -114,8 +138,15 @@ class SubscriptionManager:
                 "payment_id": payment_id
             }
             
+            # Log subscription data after addition
+            logger.info(f"[DEBUG] Updated subscriptions data for user {user_id}: {self.subscriptions['users'].get(user_id)}")
+            
             # Сохраняем данные и обновляем кеш
             self._save_subscriptions()
+            
+            # Manually update the active cache for this user to ensure it's immediately available
+            self.active_cache[user_id] = True
+            logger.info(f"[DEBUG] Manually updated active cache for user {user_id} to {self.active_cache.get(user_id)}")
             
             logger.info(f"Добавлена подписка для пользователя {user_id}, план {plan_name}, " 
                        f"срок окончания: {datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')}")
@@ -136,29 +167,56 @@ class SubscriptionManager:
             bool: True, если у пользователя есть активная подписка
         """
         # Преобразуем user_id в строку для единообразия
+        original_user_id = user_id
         user_id = str(user_id)
+        
+        logger.info(f"[DEBUG] Checking active subscription for user ID: {original_user_id} (as string: {user_id})")
         
         # Сначала проверяем кеш для быстрого ответа
         if user_id in self.active_cache:
-            return self.active_cache[user_id]
+            cache_result = self.active_cache[user_id]
+            logger.info(f"[DEBUG] Found user {user_id} in cache with value: {cache_result}")
+            return cache_result
+        
+        # Log subscription data for debugging
+        all_users = list(self.subscriptions.get("users", {}).keys())
+        logger.info(f"[DEBUG] All users in subscription data: {all_users}")
         
         # Если пользователя нет в кеше, проверяем полностью
-        if "users" not in self.subscriptions or user_id not in self.subscriptions["users"]:
+        if "users" not in self.subscriptions:
+            logger.info(f"[DEBUG] No 'users' key in subscription data")
+            return False
+            
+        if user_id not in self.subscriptions["users"]:
+            logger.info(f"[DEBUG] User {user_id} not found in subscription data")
             return False
         
         subscription = self.subscriptions["users"][user_id]
+        logger.info(f"[DEBUG] Found subscription data for user {user_id}: {subscription}")
         
         # Проверяем статус и срок действия подписки
-        if subscription.get("status") != "active":
+        status = subscription.get("status")
+        if status != "active":
+            logger.info(f"[DEBUG] Subscription status is not active: {status}")
             return False
         
         current_time = datetime.now().timestamp()
-        if subscription.get("expires_at", 0) <= current_time:
+        expires_at = subscription.get("expires_at", 0)
+        
+        logger.info(f"[DEBUG] Checking expiration: current_time={current_time}, expires_at={expires_at}, "  
+                   f"formatted_current={datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')}, "  
+                   f"formatted_expires={datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        if expires_at <= current_time:
             # Подписка истекла, обновляем ее статус
+            logger.info(f"[DEBUG] Subscription has expired, updating status to 'expired'")
             subscription["status"] = "expired"
             self._save_subscriptions()
             return False
         
+        # Update cache manually
+        self.active_cache[user_id] = True
+        logger.info(f"[DEBUG] Subscription is active, updating cache and returning True")
         return True
     
     def check_payment_status(self, payment_id):
@@ -258,7 +316,28 @@ def check_user_subscription(user_id):
     Returns:
         bool: True, если у пользователя есть активная подписка
     """
-    return subscription_manager.has_active_subscription(user_id)
+    # Debug logging
+    original_user_id = user_id
+    user_id = str(user_id)  # Ensure user_id is a string
+    
+    # Check if subscription exists in data
+    has_subscription = "users" in subscription_manager.subscriptions and user_id in subscription_manager.subscriptions["users"]
+    subscription_data = subscription_manager.subscriptions.get("users", {}).get(user_id, {})
+    
+    logger.info(f"[DEBUG] Checking subscription for user_id: {original_user_id} (converted to {user_id})")
+    logger.info(f"[DEBUG] User exists in subscriptions data: {has_subscription}")
+    logger.info(f"[DEBUG] Subscription data: {subscription_data}")
+    
+    # Check cache status
+    cache_status = user_id in subscription_manager.active_cache
+    cache_value = subscription_manager.active_cache.get(user_id, "Not in cache")
+    logger.info(f"[DEBUG] User in active cache: {cache_status}, cache value: {cache_value}")
+    
+    # Get result
+    result = subscription_manager.has_active_subscription(user_id)
+    logger.info(f"[DEBUG] Final subscription check result: {result}")
+    
+    return result
 
 def add_user_subscription(user_id, plan_name="Стандарт", duration_days=30, payment_id=None):
     """
