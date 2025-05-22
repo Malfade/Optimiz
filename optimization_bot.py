@@ -22,6 +22,13 @@ from telebot.async_telebot import AsyncTeleBot
 import time
 import pkg_resources
 import inspect
+# Импортируем API сервер для активации подписок
+try:
+    import subscription_api
+    has_api_server = True
+except ImportError:
+    has_api_server = False
+    print("ВНИМАНИЕ: Модуль API сервера для подписок не найден")
 
 # Импортируем модуль проверки подписок
 try:
@@ -2294,8 +2301,11 @@ def cmd_subscription(message):
         bot.send_message(message.chat.id, "Произошла ошибка при получении информации о подписке. Пожалуйста, попробуйте снова.")
 
 def main():
-    """Запуск бота"""
+    """Основная функция бота"""
     try:
+        # Запускаем API сервер для активации подписок
+        if has_api_server:
+            subscription_api.start_subscription_api(bot)
         # Проверяем, не запущен ли уже бот
         if not ensure_single_instance():
             logger.error("Завершаем работу из-за уже запущенного экземпляра")
@@ -2404,5 +2414,7 @@ def main():
         if has_healthcheck:
             healthcheck.update_bot_status({"status": "crashed", "errors": [str(e)]})
 
+# Для тестирования
 if __name__ == "__main__":
-    main() 
+    # Запускаем бота
+    main()
