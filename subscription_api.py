@@ -6,6 +6,7 @@ API сервер для обработки запросов на активац�
 
 import os
 import logging
+import threading
 import json
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
