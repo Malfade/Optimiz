@@ -53,6 +53,122 @@ def health_check():
         'bot_connected': bot_instance is not None
     })
 
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment():
+    """
+    Создание платежа через YooKassa
+    """
+    try:
+        data = request.json
+        logger.info(f"Получен запрос на создание платежа: {data}")
+        
+        required_fields = ['amount', 'planName', 'userId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Отсутствует обязательное поле: {field}'
+                }), 400
+        
+        # Создаем платеж через YooKassa
+        # Здесь нужно будет добавить логику создания платежа
+        # Возвращаем ID платежа и URL для оплаты
+        return jsonify({
+            'success': True,
+            'orderId': 'test_order_123',  # В реальности будет ID от YooKassa
+            'paymentUrl': 'https://yookassa.ru/payment'  # В реальности будет URL от YooKassa
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при создании платежа: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/payment-status/<order_id>', methods=['GET'])
+def get_payment_status(order_id):
+    """
+    Получение статуса платежа
+    """
+    try:
+        logger.info(f"Получен запрос статуса платежа: {order_id}")
+        
+        # Здесь нужно будет добавить логику проверки статуса платежа
+        # Возвращаем статус платежа
+        return jsonify({
+            'success': True,
+            'status': 'succeeded',  # В реальности будет статус от YooKassa
+            'paymentId': 'payment_123'  # В реальности будет ID платежа от YooKassa
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса платежа: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/activate-subscription', methods=['POST'])
+def activate_subscription():
+    """
+    Активация подписки после успешной оплаты
+    """
+    try:
+        data = request.json
+        logger.info(f"Получен запрос на активацию подписки: {data}")
+        
+        required_fields = ['userId', 'paymentId', 'planName']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Отсутствует обязательное поле: {field}'
+                }), 400
+        
+        # Вызываем функцию добавления подписки
+        if has_subscription_check:
+            success = add_user_subscription(
+                data['userId'],
+                data['planName'],
+                30,  # Продолжительность в днях
+                data['paymentId']
+            )
+            
+            if success:
+                # Отправляем уведомление пользователю
+                if bot_instance:
+                    try:
+                        bot_instance.send_message(
+                            chat_id=data['userId'],
+                            text="✅ Ваша подписка успешно активирована!\n\n"  
+                                 f"*План:* {data['planName']}\n"  
+                                 f"*Срок действия:* 30 дней\n\n"  
+                                 f"Теперь вы можете использовать все функции бота.",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке уведомления: {e}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Подписка успешно активирована'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Не удалось активировать подписку'
+                }), 500
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Модуль проверки подписок недоступен'
+            }), 500
+    except Exception as e:
+        logger.error(f"Ошибка при активации подписки: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/add_subscription', methods=['POST'])
 def add_subscription_api():
     """
