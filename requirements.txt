@@ -1,8 +1,8 @@
 # Зависимости для Windows Optimization Bot
 # Точные версии для обеспечения совместимости
 
-# Telegram Bot API
-pyTelegramBotAPI==4.15.0
+# Telegram Bot API - используем более новую стабильную версию
+pyTelegramBotAPI==4.21.0
 
 # Асинхронный клиент HTTP
 aiohttp==3.9.3
@@ -29,3 +29,6 @@ python-dateutil==2.8.2
 
 # Библиотеки для безопасности
 pyjwt==2.8.0
+
+# Дополнительные зависимости для стабильности
+packaging>=20.0

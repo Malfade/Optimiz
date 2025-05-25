@@ -38,6 +38,9 @@ except ImportError:
     has_subscription_check = False
     print("ВНИМАНИЕ: Модуль проверки подписок не найден, функционал подписок отключен")
 
+# URL платежной системы из переменной окружения
+PAYMENT_SYSTEM_URL = os.getenv('PAYMENT_SYSTEM_URL', 'https://your-payment-app.up.railway.app')
+
 # Импортируем модуль для healthcheck (для Railway)
 try:
     import healthcheck
@@ -205,8 +208,9 @@ def check_subscription_before_action(message):
             markup = types.InlineKeyboardMarkup()
             
             # Создаем URL для мини-приложения оплаты
-            # Используем реальный URL платежной системы на Railway с передачей user_id через start_param
-            payment_url = f"https://paymentsysatem-production.up.railway.app/?start_param=user_id_{user_id}"
+            # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
+            # Используем реальный URL платежной системы на Railway
+            payment_url = f"{PAYMENT_SYSTEM_URL}/?user_id={user_id}&bot_username={bot_username}"
             
             # Добавляем кнопку оплаты через мини-приложение
             payment_button = types.InlineKeyboardButton(
@@ -1758,7 +1762,7 @@ def check_subscription_before_action(message):
         # Создаем URL для мини-приложения оплаты
         # Для WebApp в Telegram необходимо использовать только публичные URL (localhost не подходит)
         # Используем реальный URL платежной системы на Railway
-        payment_url = f"https://paymentsysatem-production.up.railway.app/?user_id={user_id}&bot_username={bot_username}"
+        payment_url = f"{PAYMENT_SYSTEM_URL}/?user_id={user_id}&bot_username={bot_username}"
         
         # Добавляем кнопку оплаты
         payment_button = types.InlineKeyboardButton(
