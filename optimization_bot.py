@@ -2645,7 +2645,7 @@ def activate_subscription():
         user_id = data.get('userId')
         order_id = data.get('orderId')
         plan_name = data.get('planName', 'Стандарт')
-        plan_duration = data.get('planDuration', 30)
+        plan_duration = data.get('planDuration', 1/24)  # По умолчанию 1 час
 
         if not user_id or not order_id:
             return jsonify({'error': 'Не указан ID пользователя или заказа'}), 400
@@ -2673,9 +2673,10 @@ def activate_subscription():
                         
                         # Отправляем уведомление пользователю в бот
                         try:
+                            duration_text = "1 час" if plan_duration < 1 else f"{int(plan_duration)} дней"
                             bot.send_message(
                                 user_id,
-                                f"✅ Подписка '{plan_name}' успешно активирована на {plan_duration} дней!\n\n"
+                                f"✅ Подписка '{plan_name}' успешно активирована на {duration_text}!\n\n"
                                 f"Теперь вы можете использовать все функции бота.",
                                 parse_mode="Markdown"
                             )
@@ -2684,7 +2685,7 @@ def activate_subscription():
                         
                         return jsonify({
                             'success': True,
-                            'message': 'Подписка успешно активирована',
+                            'message': f'Подписка успешно активирована на {"1 час" if plan_duration < 1 else f"{int(plan_duration)} дней"}',
                             'expires_at': (datetime.now().timestamp() + plan_duration * 24 * 3600)
                         })
                     except Exception as e:

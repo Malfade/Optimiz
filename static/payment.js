@@ -11,9 +11,9 @@ const CONFIG = {
 
 // Подписки и их цены
 const PLANS = [
-    { id: 'basic', name: 'Базовый', price: 20, description: 'Доступ к основным функциям бота на 1 месяц' },
-    { id: 'standard', name: 'Стандартный', price: 499, description: 'Доступ ко всем функциям бота на 1 месяц' },
-    { id: 'premium', name: 'Премиум', price: 999, description: 'Доступ ко всем функциям бота на 3 месяца со скидкой' }
+    { id: 'basic', name: 'Базовый', price: 20, description: 'Доступ к основным функциям бота на 1 час' },
+    { id: 'standard', name: 'Стандартный', price: 499, description: 'Доступ ко всем функциям бота на 1 час' },
+    { id: 'premium', name: 'Премиум', price: 999, description: 'Доступ ко всем функциям бота на 1 час (тест премиум)' }
 ];
 
 // Глобальные переменные для отслеживания платежа
@@ -337,20 +337,20 @@ async function handleSuccessfulPayment(orderId) {
         hideLoader();
         
         let planName = 'Стандарт';
-        let planDuration = 30;
+        let planDuration = 1/24; // 1 час
         
         if (window.selectedPlan) {
             planName = window.selectedPlan.name;
             if (window.selectedPlan.id === 'basic') {
-                planDuration = 30;
+                planDuration = 1/24; // 1 час
             } else if (window.selectedPlan.id === 'premium') {
-                planDuration = 90;
+                planDuration = 1/24; // 1 час (тест премиум)
             } else {
-                planDuration = 30;
+                planDuration = 1/24; // 1 час
             }
         }
         
-        console.log(`Активируем подписку: план=${planName}, длительность=${planDuration} дней`);
+        console.log(`Активируем подписку: план=${planName}, длительность=${planDuration} дней (${planDuration * 24} часов)`);
         
         const subscriptionResponse = await fetch(`${CONFIG.apiUrl}/api/activate-subscription`, {
             method: 'POST',
@@ -378,7 +378,7 @@ async function handleSuccessfulPayment(orderId) {
         if (tg.showPopup && typeof tg.showPopup === 'function') {
             tg.showPopup({
                 title: '✅ Оплата успешна!',
-                message: `Ваша подписка "${planName}" успешно активирована на ${planDuration} дней`,
+                message: `Ваша подписка "${planName}" успешно активирована на 1 час`,
                 buttons: [{ type: 'close' }]
             }, () => {
                 tg.close();
@@ -389,7 +389,7 @@ async function handleSuccessfulPayment(orderId) {
                 const modalTitle = successModal.querySelector('h2');
                 const modalText = successModal.querySelector('p');
                 if (modalTitle) modalTitle.textContent = 'Оплата успешна!';
-                if (modalText) modalText.textContent = `Ваша подписка "${planName}" активирована на ${planDuration} дней`;
+                if (modalText) modalText.textContent = `Ваша подписка "${planName}" активирована на 1 час`;
                 
                 successModal.classList.remove('hidden');
                 successModal.classList.add('modal-visible');
