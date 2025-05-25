@@ -114,6 +114,27 @@ class SubscriptionManager:
             user_id = str(user_id)
             logger.info(f"[DEBUG] Adding subscription for user ID: {user_id}, plan: {plan_name}, duration: {duration_days} days")
             
+            # Проверяем статус платежа через API сервера монетизации
+            if payment_id:
+                payment_status_url = f"{MONETIZATION_SERVER_URL}/api/payment-status/{payment_id}"
+                logger.info(f"[DEBUG] Checking payment status at {payment_status_url}")
+                
+                try:
+                    response = requests.get(payment_status_url)
+                    if response.status_code == 200:
+                        payment_data = response.json()
+                        logger.info(f"[DEBUG] Payment status response: {payment_data}")
+                        
+                        if payment_data.get('status') != 'succeeded':
+                            logger.error(f"[DEBUG] Payment {payment_id} not succeeded: {payment_data.get('status')}")
+                            return False
+                    else:
+                        logger.error(f"[DEBUG] Failed to check payment status: {response.status_code}")
+                        return False
+                except Exception as e:
+                    logger.error(f"[DEBUG] Error checking payment status: {e}")
+                    return False
+            
             # Создаем записи в структуре, если их еще нет
             if "users" not in self.subscriptions:
                 self.subscriptions["users"] = {}

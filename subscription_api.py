@@ -50,8 +50,11 @@ def set_bot_instance(bot):
         bot: Экземпляр бота Telegram
     """
     global bot_instance
-    bot_instance = bot
-    logger.info("Экземпляр бота успешно установлен в API сервере")
+    if bot:
+        bot_instance = bot
+        logger.info(f"Экземпляр бота успешно установлен в API сервере: {bot_instance}")
+    else:
+        logger.error("Ошибка: передан None вместо экземпляра бота")
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -284,6 +287,36 @@ def start_subscription_api(bot=None):
     logger.info(f"API сервер для подписок запущен на порту {os.getenv('BOT_API_PORT', 5000)}")
     
     return api_thread
+
+def add_user_subscription(user_id, plan_name, duration_days=30, payment_id=None):
+    """
+    Добавляет подписку для пользователя
+    
+    Args:
+        user_id (str): ID пользователя
+        plan_name (str): Название плана
+        duration_days (int): Продолжительность в днях
+        payment_id (str): ID платежа
+        
+    Returns:
+        bool: True если подписка успешно добавлена
+    """
+    try:
+        # Создаем экземпляр менеджера подписок
+        subscription_manager = SubscriptionManager()
+        
+        # Добавляем подписку
+        success = subscription_manager.add_subscription(
+            user_id=user_id,
+            plan_name=plan_name,
+            duration_days=duration_days,
+            payment_id=payment_id
+        )
+        
+        return success
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении подписки: {e}")
+        return False
 
 # Для тестирования
 if __name__ == "__main__":
