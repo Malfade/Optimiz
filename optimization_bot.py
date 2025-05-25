@@ -58,6 +58,8 @@ except Exception as e:
 try:
     import subscription_api
     has_api_server = True
+    # НЕ запускаем отдельный сервер, так как у нас уже есть интегрированный Flask
+    print("INFO: subscription_api импортирован, но отдельный сервер не запускается")
 except ImportError:
     has_api_server = False
     print("ВНИМАНИЕ: Модуль API сервера для подписок не найден")
@@ -197,10 +199,8 @@ ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 # Создаем экземпляр бота
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Инициализируем API сервер подписок
-if has_api_server:
-    subscription_api.start_subscription_api(bot)
-    logger.info("API сервер подписок успешно инициализирован")
+# НЕ инициализируем отдельный API сервер, используем интегрированный Flask
+logger.info("Используется интегрированный Flask сервер вместо отдельного API сервера")
 
 # Словари для хранения состояний пользователей
 user_states = {}  # Хранение состояний пользователей
@@ -2404,9 +2404,6 @@ def cmd_subscription(message):
 def main():
     """Основная функция бота"""
     try:
-        # Запускаем API сервер для активации подписок
-        if has_api_server:
-            subscription_api.start_subscription_api(bot)
         # Проверяем, не запущен ли уже бот
         if not ensure_single_instance():
             logger.error("Завершаем работу из-за уже запущенного экземпляра")
@@ -2635,14 +2632,20 @@ def activate_subscription():
         if not user_id or not order_id:
             return jsonify({'error': 'Не указан ID пользователя или заказа'}), 400
 
+        logger.info(f"Попытка активации подписки: user_id={user_id}, order_id={order_id}, plan={plan_name}")
+
         # Проверяем статус платежа
         if order_id in orders:
+            current_status = orders[order_id]['status']
+            logger.info(f"Статус заказа {order_id}: {current_status}")
+            
             # Активируем подписку только если платеж действительно успешен
-            if orders[order_id]['status'] == 'succeeded':
+            if current_status == 'succeeded':
                 # Активируем подписку
                 if has_subscription_check:
                     try:
                         add_user_subscription(user_id, plan_name, plan_duration)
+                        logger.info(f"Подписка успешно добавлена для пользователя {user_id}")
                         
                         # Отправляем уведомление пользователю в бот
                         try:
@@ -2664,13 +2667,16 @@ def activate_subscription():
                         logger.error(f"Ошибка при активации подписки: {e}")
                         return jsonify({'error': f'Ошибка активации: {str(e)}'}), 500
                 else:
+                    logger.info("Система подписок отключена, возвращаем успех")
                     return jsonify({
                         'success': True,
                         'message': 'Подписка активирована (система подписок отключена)'
                     })
             else:
-                return jsonify({'error': 'Платеж не завершен'}), 400
+                logger.error(f"Платеж не завершен. Текущий статус: {current_status}")
+                return jsonify({'error': f'Платеж не завершен. Статус: {current_status}'}), 400
         else:
+            logger.error(f"Заказ {order_id} не найден в orders")
             return jsonify({'error': 'Заказ не найден'}), 404
 
     except Exception as e:

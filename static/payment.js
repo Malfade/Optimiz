@@ -315,6 +315,8 @@ async function handleSuccessfulPayment(orderId) {
             }
         }
         
+        console.log(`Активируем подписку: план=${planName}, длительность=${planDuration} дней`);
+        
         const subscriptionResponse = await fetch(`${CONFIG.apiUrl}/api/activate-subscription`, {
             method: 'POST',
             headers: {
@@ -329,8 +331,10 @@ async function handleSuccessfulPayment(orderId) {
         });
         
         const subscriptionData = await subscriptionResponse.json();
+        console.log('Ответ сервера на активацию подписки:', subscriptionData);
         
         if (!subscriptionResponse.ok || !subscriptionData.success) {
+            console.error('Ошибка активации подписки:', subscriptionData);
             throw new Error(subscriptionData.error || 'Не удалось активировать подписку');
         }
         
