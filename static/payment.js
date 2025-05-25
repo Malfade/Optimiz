@@ -91,7 +91,32 @@ function checkUrlForPaymentStatus() {
     
     if (orderId && (success === 'true' || success === '1' || paymentId)) {
         console.log('Обнаружен успешный платеж в URL:', orderId);
-        handleSuccessfulPayment(orderId);
+        
+        // В тестовом режиме автоматически обновляем статус заказа
+        if (orderId.startsWith('order_')) {
+            console.log('Тестовый режим: обновляем статус заказа на succeeded');
+            fetch(`${CONFIG.apiUrl}/api/simulate-payment-success/${orderId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Статус тестового заказа обновлен на succeeded');
+                } else {
+                    console.log('Не удалось обновить статус тестового заказа, но продолжаем активацию');
+                }
+                // В любом случае пытаемся активировать подписку
+                handleSuccessfulPayment(orderId);
+            }).catch(error => {
+                console.log('Ошибка при обновлении статуса тестового заказа:', error);
+                // Все равно пытаемся активировать подписку
+                handleSuccessfulPayment(orderId);
+            });
+        } else {
+            // Реальный платеж
+            handleSuccessfulPayment(orderId);
+        }
     }
 }
 

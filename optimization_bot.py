@@ -2639,6 +2639,12 @@ def activate_subscription():
             current_status = orders[order_id]['status']
             logger.info(f"Статус заказа {order_id}: {current_status}")
             
+            # В тестовом режиме: если заказ существует и это тестовый режим, автоматически помечаем как успешный
+            if TEST_MODE and order_id.startswith('order_') and current_status == 'pending':
+                orders[order_id]['status'] = 'succeeded'
+                current_status = 'succeeded'
+                logger.info(f"Тестовый режим: автоматически обновлен статус заказа {order_id} на succeeded")
+            
             # Активируем подписку только если платеж действительно успешен
             if current_status == 'succeeded':
                 # Активируем подписку
