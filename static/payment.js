@@ -275,12 +275,22 @@ async function createPayment(amount, planName, userId, plan) {
         
         let email = "customer@example.com";
         
+        // В боевом режиме обязательно запрашиваем email для чека
         try {
-            const userEmail = prompt("Введите email для получения чека:", "");
+            const userEmail = prompt("Для выставления чека введите ваш email:", "");
             if (userEmail && userEmail.includes("@") && userEmail.includes(".")) {
                 email = userEmail;
+            } else if (userEmail && userEmail.trim() !== "") {
+                // Если пользователь ввел что-то, но это не похоже на email
+                const confirmDefault = confirm("Введенный email некорректный. Использовать email по умолчанию для чека?");
+                if (!confirmDefault) {
+                    throw new Error("Для оформления подписки необходимо указать корректный email");
+                }
             }
         } catch (e) {
+            if (e.message.includes("необходимо указать")) {
+                throw e; // Пробрасываем ошибку дальше
+            }
             console.log("Не удалось запросить email, используем значение по умолчанию");
         }
         

@@ -2537,7 +2537,7 @@ def create_payment():
         idempotence_key = str(uuid.uuid4())
         
         if yooKassa and not TEST_MODE:
-            # Реальный режим
+            # Реальный режим - требуется фискальный чек
             payment_data = {
                 "amount": {"value": amount, "currency": "RUB"},
                 "confirmation": {
@@ -2546,6 +2546,24 @@ def create_payment():
                 },
                 "capture": True,
                 "description": description,
+                "receipt": {
+                    "customer": {
+                        "email": email
+                    },
+                    "items": [
+                        {
+                            "description": f"Подписка '{plan_name}' на бота оптимизации",
+                            "quantity": "1.00",
+                            "amount": {
+                                "value": amount,
+                                "currency": "RUB"
+                            },
+                            "vat_code": 1,  # НДС не облагается
+                            "payment_mode": "full_payment",
+                            "payment_subject": "service"
+                        }
+                    ]
+                },
                 "metadata": {
                     "userId": user_id,
                     "planName": plan_name
