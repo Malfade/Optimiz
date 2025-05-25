@@ -2637,7 +2637,8 @@ def activate_subscription():
 
         # Проверяем статус платежа
         if order_id in orders:
-            if orders[order_id]['status'] == 'succeeded' or TEST_MODE:
+            # Активируем подписку только если платеж действительно успешен
+            if orders[order_id]['status'] == 'succeeded':
                 # Активируем подписку
                 if has_subscription_check:
                     try:
@@ -2694,6 +2695,28 @@ def yookassa_webhook():
     except Exception as e:
         logger.error(f"Ошибка при обработке webhook: {e}")
         return '', 500
+
+@app.route('/api/simulate-payment-success/<order_id>', methods=['POST'])
+def simulate_payment_success(order_id):
+    """Имитация успешной оплаты в тестовом режиме"""
+    try:
+        if not TEST_MODE:
+            return jsonify({'error': 'Доступно только в тестовом режиме'}), 403
+            
+        if order_id in orders:
+            orders[order_id]['status'] = 'succeeded'
+            logger.info(f"Тестовый платеж {order_id} помечен как успешный")
+            return jsonify({
+                'success': True,
+                'message': 'Платеж успешно имитирован',
+                'orderId': order_id
+            })
+        else:
+            return jsonify({'error': 'Заказ не найден'}), 404
+            
+    except Exception as e:
+        logger.error(f"Ошибка при имитации платежа: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def start_web_server():
     """Запуск веб-сервера в отдельном потоке"""

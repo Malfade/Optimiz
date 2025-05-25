@@ -29,22 +29,22 @@
 Добавить в **Variables**:
 
 **Обязательные:**
-- [ ] `TELEGRAM_TOKEN=ваш_токен`
-- [ ] `ANTHROPIC_API_KEY=ваш_ключ`
-- [ ] `PAYMENT_SYSTEM_URL=https://ваш-проект.up.railway.app`
+- [ ] `TELEGRAM_TOKEN=ваш_токен`--
+- [ ] `ANTHROPIC_API_KEY=ваш_ключ`--
+- [ ] `PAYMENT_SYSTEM_URL=https://paymentsysatem-production.up.railway.app/`--
 
 **Платежи:**
-- [ ] `YOOKASSA_SHOP_ID=ваш_shop_id`
-- [ ] `YOOKASSA_SECRET_KEY=ваш_secret_key`
-- [ ] `TEST_MODE=true`
-- [ ] `WEBHOOK_SECRET=случайная_строка`
+- [ ] `YOOKASSA_SHOP_ID=1086529`--
+- [ ] `YOOKASSA_SECRET_KEY=test_fItob0t2XOZPQETIa7npqoKf5PsxbXlrMTHV88P4WZA`--
+- [ ] `TEST_MODE=true`--
+- [ ] `WEBHOOK_SECRET=big_big_cecret`--
 
 **Системные:**
-- [ ] `PORT=5000`
-- [ ] `ENABLE_SUBSCRIPTIONS=true`
-- [ ] `RAILWAY_ENVIRONMENT=production`
-- [ ] `DEBUG=false`
-- [ ] `LOG_LEVEL=INFO`
+- [ ] `PORT=5000`--
+- [ ] `ENABLE_SUBSCRIPTIONS=true`--
+- [ ] `RAILWAY_ENVIRONMENT=production`--
+- [ ] `DEBUG=false`--
+- [ ] `LOG_LEVEL=INFO`--
 
 ### 3. Получение URL:
 - [ ] Дождаться завершения деплоя
@@ -76,7 +76,7 @@ cancel - Отменить текущую операцию
 
 ### Webhook для продакшена:
 - [ ] В панели YooKassa → **Webhook URL**
-- [ ] Указать: `https://ваш-проект.up.railway.app/api/webhook`
+- [ ] Указать: `https://bottest-production-4571.up.railway.app/api/webhook`
 - [ ] Выбрать события: `payment.succeeded`, `payment.canceled`
 
 ## ✅ Тестирование

@@ -401,37 +401,259 @@ async function initPaymentWidget(token, orderId) {
     });
     
     try {
-        if (typeof YooMoneyCheckoutWidget !== 'function') {
-            throw new Error('Библиотека YooKassa не загружена');
-        }
+        // Проверяем, является ли это тестовым режимом
+        const isTestMode = token.startsWith('test_token_');
         
-        const yooKassaWidget = new YooMoneyCheckoutWidget({
-            confirmation_token: token,
-            return_url: window.location.href + '?orderId=' + orderId + '&success=true',
-            embedded_3ds: true,
-            error_callback: function(error) {
-                console.error('Ошибка YooKassa виджета:', error);
-                showError(`Ошибка платежного виджета: ${error.message || 'Неизвестная ошибка'}`);
-            },
-            success_callback: function(data) {
-                console.log('Успешная оплата YooKassa:', data);
-                handleSuccessfulPayment(orderId);
+        if (isTestMode) {
+            // Создаем тестовую форму оплаты
+            createTestPaymentForm(paymentContainer, orderId);
+        } else {
+            // Используем реальный виджет YooKassa
+            if (typeof YooMoneyCheckoutWidget !== 'function') {
+                throw new Error('Библиотека YooKassa не загружена');
             }
-        });
-        
-        yooKassaWidget.render('paymentFormContainer')
-            .then(() => {
-                console.log('Виджет YooKassa успешно отрисован');
-                checkPaymentStatus(orderId);
-                setupAdditionalPaymentChecks(orderId);
-            })
-            .catch(err => {
-                console.error('Ошибка при отрисовке виджета YooKassa:', err);
-                showError(`Не удалось отобразить форму оплаты: ${err.message || 'Неизвестная ошибка'}`);
+            
+            const yooKassaWidget = new YooMoneyCheckoutWidget({
+                confirmation_token: token,
+                return_url: window.location.href + '?orderId=' + orderId + '&success=true',
+                embedded_3ds: true,
+                error_callback: function(error) {
+                    console.error('Ошибка YooKassa виджета:', error);
+                    showError(`Ошибка платежного виджета: ${error.message || 'Неизвестная ошибка'}`);
+                },
+                success_callback: function(data) {
+                    console.log('Успешная оплата YooKassa:', data);
+                    handleSuccessfulPayment(orderId);
+                }
             });
+            
+            yooKassaWidget.render('paymentFormContainer')
+                .then(() => {
+                    console.log('Виджет YooKassa успешно отрисован');
+                    checkPaymentStatus(orderId);
+                    setupAdditionalPaymentChecks(orderId);
+                })
+                .catch(err => {
+                    console.error('Ошибка при отрисовке виджета YooKassa:', err);
+                    showError(`Не удалось отобразить форму оплаты: ${err.message || 'Неизвестная ошибка'}`);
+                });
+        }
     } catch (error) {
         console.error('Ошибка инициализации виджета YooKassa:', error);
         showError(`Ошибка инициализации платежного виджета: ${error.message}`);
+    }
+}
+
+// Создание тестовой формы оплаты
+function createTestPaymentForm(container, orderId) {
+    console.log('Создание тестовой формы оплаты');
+    
+    container.innerHTML = `
+        <div class="test-payment-form">
+            <div class="test-payment-header">
+                <h3>🧪 Тестовый режим оплаты</h3>
+                <p>Это демонстрация платежной формы</p>
+            </div>
+            
+            <div class="payment-form">
+                <div class="form-group">
+                    <label>Номер карты:</label>
+                    <input type="text" value="4111 1111 1111 1111" readonly class="test-input">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Срок действия:</label>
+                        <input type="text" value="12/25" readonly class="test-input">
+                    </div>
+                    <div class="form-group">
+                        <label>CVC:</label>
+                        <input type="text" value="123" readonly class="test-input">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Имя на карте:</label>
+                    <input type="text" value="TEST USER" readonly class="test-input">
+                </div>
+                
+                <button id="testPayButton" class="test-pay-button">
+                    💳 Оплатить (тестовый режим)
+                </button>
+                
+                <div class="test-info">
+                    <p><strong>ℹ️ Это тестовый платеж</strong></p>
+                    <p>В реальном режиме здесь будет настоящая форма оплаты</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Добавляем стили для тестовой формы
+    if (!document.getElementById('testPaymentStyles')) {
+        const styles = document.createElement('style');
+        styles.id = 'testPaymentStyles';
+        styles.textContent = `
+            .test-payment-form {
+                max-width: 400px;
+                margin: 0 auto;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                border: 2px dashed #007bff;
+            }
+            
+            .test-payment-header {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            
+            .test-payment-header h3 {
+                color: #007bff;
+                margin-bottom: 5px;
+            }
+            
+            .test-payment-header p {
+                color: #6c757d;
+                font-size: 14px;
+            }
+            
+            .payment-form {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            
+            .form-group {
+                margin-bottom: 15px;
+            }
+            
+            .form-row {
+                display: flex;
+                gap: 15px;
+            }
+            
+            .form-row .form-group {
+                flex: 1;
+            }
+            
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: 500;
+                color: #333;
+            }
+            
+            .test-input {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background: #f8f9fa;
+                color: #666;
+                font-family: monospace;
+            }
+            
+            .test-pay-button {
+                width: 100%;
+                padding: 15px;
+                background: #28a745;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                margin: 20px 0;
+                transition: all 0.3s ease;
+            }
+            
+            .test-pay-button:hover {
+                background: #218838;
+                transform: translateY(-1px);
+            }
+            
+            .test-info {
+                background: #e7f3ff;
+                padding: 15px;
+                border-radius: 5px;
+                border-left: 4px solid #007bff;
+                margin-top: 15px;
+            }
+            
+            .test-info p {
+                margin: 5px 0;
+                font-size: 14px;
+                color: #0056b3;
+            }
+        `;
+        document.head.appendChild(styles);
+    }
+    
+    // Обработчик кнопки тестовой оплаты
+    const testPayButton = document.getElementById('testPayButton');
+    testPayButton.addEventListener('click', async () => {
+        testPayButton.disabled = true;
+        testPayButton.textContent = 'Обработка платежа...';
+        
+        try {
+            // Имитируем процесс оплаты
+            await simulatePaymentProcess(orderId);
+        } catch (error) {
+            console.error('Ошибка при тестовой оплате:', error);
+            showError('Ошибка при обработке тестового платежа');
+            testPayButton.disabled = false;
+            testPayButton.textContent = '💳 Оплатить (тестовый режим)';
+        }
+    });
+}
+
+// Имитация процесса оплаты
+async function simulatePaymentProcess(orderId) {
+    console.log('Начинаем имитацию платежа для заказа:', orderId);
+    
+    try {
+        // Показываем прогресс
+        const testPayButton = document.getElementById('testPayButton');
+        
+        // Шаг 1: Проверка данных карты
+        testPayButton.textContent = 'Проверка данных карты...';
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Шаг 2: Авторизация платежа
+        testPayButton.textContent = 'Авторизация платежа...';
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Шаг 3: Подтверждение платежа на сервере
+        testPayButton.textContent = 'Подтверждение платежа...';
+        
+        const response = await fetch(`${CONFIG.apiUrl}/api/simulate-payment-success/${orderId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Ошибка при имитации платежа на сервере');
+        }
+        
+        const result = await response.json();
+        console.log('Результат имитации платежа:', result);
+        
+        // Шаг 4: Успешное завершение
+        testPayButton.textContent = '✅ Платеж успешен!';
+        testPayButton.style.background = '#28a745';
+        
+        // Ждем немного и обрабатываем успешный платеж
+        setTimeout(() => {
+            handleSuccessfulPayment(orderId);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Ошибка при имитации платежа:', error);
+        throw error;
     }
 }
 
