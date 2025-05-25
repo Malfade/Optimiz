@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подписка на бота - Optimizator</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://yookassa.ru/checkout-widget/v1/checkout-widget.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='payment.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Загрузчик -->
+        <div id="loader" class="loader hidden">
+            <div class="spinner"></div>
+            <p>Создание платежа...</p>
+        </div>
+
+        <!-- Сообщение об ошибке -->
+        <div id="errorMessage" class="error-message hidden"></div>
+
+        <!-- Главная страница с тарифами -->
+        <div id="mainPage" class="main-page">
+            <h1>🚀 Подписка на Optimizator Bot</h1>
+            <p class="welcome">Привет, <span id="userName">Пользователь</span>!</p>
+            <p class="subtitle">Выберите подходящий тарифный план для использования всех функций бота</p>
+
+            <div id="plans" class="plans-container">
+                <!-- Планы будут добавлены через JavaScript -->
+            </div>
+
+            <div class="features">
+                <h3>✨ Что вы получите:</h3>
+                <ul>
+                    <li>🔧 Создание скриптов оптимизации Windows</li>
+                    <li>🔨 Исправление ошибок в скриптах</li>
+                    <li>🤖 Персонализированные рекомендации от AI</li>
+                    <li>📱 Поддержка 24/7</li>
+                    <li>🛡️ Безопасные и проверенные скрипты</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Модальное окно оплаты -->
+        <div id="paymentModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>💳 Оплата подписки</h2>
+                    <button id="closePayment" class="close-btn">&times;</button>
+                </div>
+                <div id="paymentFormContainer" class="payment-form-container">
+                    <!-- Здесь будет форма оплаты YooKassa -->
+                </div>
+                <div class="payment-help">
+                    <p>💡 Не видите подтверждение оплаты?</p>
+                    <button id="checkPaymentButton" class="check-payment-btn">
+                        Я уже оплатил, но не вижу подтверждения
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно успешной оплаты -->
+        <div id="successModal" class="modal hidden">
+            <div class="modal-content success">
+                <div class="success-icon">✅</div>
+                <h2>Оплата успешна!</h2>
+                <p>Ваша подписка активирована</p>
+                <button id="closeSuccess" class="success-btn">Отлично!</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='payment.js') }}"></script>
+</body>
+</html> 

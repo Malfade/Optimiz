@@ -10,6 +10,7 @@ from io import BytesIO
 from datetime import datetime
 import zipfile
 import asyncio
+import threading
 # Используем прямой импорт нашей собственной реализации
 import fallback_anthropic as anthropic
 # Обертки для обратной совместимости
@@ -22,6 +23,37 @@ from telebot.async_telebot import AsyncTeleBot
 import time
 import pkg_resources
 import inspect
+
+# Добавляем Flask для веб-сервера
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_cors import CORS
+
+# Создаем Flask приложение для веб-сервера
+app = Flask(__name__)
+CORS(app)  # Разрешаем CORS для мини-приложения
+
+# Для хранения заказов (в реальном приложении используйте базу данных)
+orders = {}
+
+# Переменные для ЮKassa
+YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID', '1086529')  # Тестовый ID
+YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY', 'test_fItob0t2XOZPQETIa7npqoKf5PsxbXlrMTHV88P4WZA')  # Тестовый ключ
+TEST_MODE = os.getenv('TEST_MODE', 'true').lower() == 'true'
+
+# Инициализация ЮKassa
+yooKassa = None
+try:
+    import yookassa
+    from yookassa import Configuration, Payment
+    Configuration.account_id = YOOKASSA_SHOP_ID
+    Configuration.secret_key = YOOKASSA_SECRET_KEY
+    yooKassa = Payment
+    print(f'ЮKassa клиент инициализирован в {"тестовом" if TEST_MODE else "боевом"} режиме')
+except ImportError:
+    print('Библиотека yookassa не найдена. Установите: pip install yookassa')
+except Exception as e:
+    print(f'Ошибка инициализации ЮKassa: {e}')
+
 # Импортируем API сервер для активации подписок
 try:
     import subscription_api
@@ -38,8 +70,8 @@ except ImportError:
     has_subscription_check = False
     print("ВНИМАНИЕ: Модуль проверки подписок не найден, функционал подписок отключен")
 
-# URL платежной системы из переменной окружения
-PAYMENT_SYSTEM_URL = os.getenv('PAYMENT_SYSTEM_URL', 'https://your-payment-app.up.railway.app')
+# URL платежной системы из переменной окружения (теперь локальный)
+PAYMENT_SYSTEM_URL = os.getenv('PAYMENT_SYSTEM_URL', 'http://localhost:5000')
 
 # Импортируем модуль для healthcheck (для Railway)
 try:
@@ -2483,7 +2515,201 @@ def main():
         if has_healthcheck:
             healthcheck.update_bot_status({"status": "crashed", "errors": [str(e)]})
 
+# Веб-роуты для платежной системы
+@app.route('/')
+def payment_home():
+    """Главная страница мини-приложения платежной системы"""
+    return render_template('payment.html')
+
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment():
+    """Создание платежа в ЮKassa"""
+    try:
+        data = request.json
+        amount = data.get('amount')
+        description = data.get('description', 'Подписка на бота')
+        user_id = data.get('userId')
+        plan_name = data.get('planName', 'Стандарт')
+        email = data.get('email', 'customer@example.com')
+
+        if not amount or not user_id:
+            return jsonify({'error': 'Не указана сумма или ID пользователя'}), 400
+
+        # Создаем заказ в ЮKassa
+        import uuid
+        idempotence_key = str(uuid.uuid4())
+        
+        if yooKassa and not TEST_MODE:
+            # Реальный режим
+            payment_data = {
+                "amount": {"value": amount, "currency": "RUB"},
+                "confirmation": {
+                    "type": "embedded",
+                    "locale": "ru_RU"
+                },
+                "capture": True,
+                "description": description,
+                "metadata": {
+                    "userId": user_id,
+                    "planName": plan_name
+                }
+            }
+            
+            payment = yooKassa.create(payment_data, idempotence_key)
+            order_id = payment.id
+            
+            # Сохраняем информацию о заказе
+            orders[order_id] = {
+                'status': payment.status,
+                'userId': user_id,
+                'amount': amount,
+                'planName': plan_name,
+                'createdAt': datetime.now()
+            }
+            
+            return jsonify({
+                'orderId': order_id,
+                'status': payment.status,
+                'confirmationToken': payment.confirmation.confirmation_token,
+                'amount': amount,
+                'testMode': False
+            })
+        else:
+            # Тестовый режим
+            order_id = f'order_{int(time.time())}_{user_id}'
+            
+            orders[order_id] = {
+                'status': 'pending',
+                'userId': user_id,
+                'amount': amount,
+                'planName': plan_name,
+                'createdAt': datetime.now()
+            }
+            
+            return jsonify({
+                'orderId': order_id,
+                'status': 'pending',
+                'confirmationToken': f'test_token_{order_id}',
+                'amount': amount,
+                'testMode': True,
+                'redirectUrl': f'{request.url_root}?orderId={order_id}&success=true'
+            })
+
+    except Exception as e:
+        logger.error(f"Ошибка при создании платежа: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/payment-status/<order_id>')
+def payment_status(order_id):
+    """Проверка статуса платежа"""
+    try:
+        if order_id in orders:
+            return jsonify({
+                'orderId': order_id,
+                'status': orders[order_id]['status']
+            })
+        elif yooKassa and not order_id.startswith('order_'):
+            # Проверяем в ЮKassa
+            payment = yooKassa.find_one(order_id)
+            if payment:
+                return jsonify({
+                    'orderId': order_id,
+                    'status': payment.status
+                })
+        
+        return jsonify({'error': 'Заказ не найден'}), 404
+    except Exception as e:
+        logger.error(f"Ошибка при проверке статуса: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/activate-subscription', methods=['POST'])
+def activate_subscription():
+    """Активация подписки после успешной оплаты"""
+    try:
+        data = request.json
+        user_id = data.get('userId')
+        order_id = data.get('orderId')
+        plan_name = data.get('planName', 'Стандарт')
+        plan_duration = data.get('planDuration', 30)
+
+        if not user_id or not order_id:
+            return jsonify({'error': 'Не указан ID пользователя или заказа'}), 400
+
+        # Проверяем статус платежа
+        if order_id in orders:
+            if orders[order_id]['status'] == 'succeeded' or TEST_MODE:
+                # Активируем подписку
+                if has_subscription_check:
+                    try:
+                        add_user_subscription(user_id, plan_name, plan_duration)
+                        
+                        # Отправляем уведомление пользователю в бот
+                        try:
+                            bot.send_message(
+                                user_id,
+                                f"✅ Подписка '{plan_name}' успешно активирована на {plan_duration} дней!\n\n"
+                                f"Теперь вы можете использовать все функции бота.",
+                                parse_mode="Markdown"
+                            )
+                        except Exception as notification_error:
+                            logger.warning(f"Не удалось отправить уведомление пользователю {user_id}: {notification_error}")
+                        
+                        return jsonify({
+                            'success': True,
+                            'message': 'Подписка успешно активирована',
+                            'expires_at': (datetime.now().timestamp() + plan_duration * 24 * 3600)
+                        })
+                    except Exception as e:
+                        logger.error(f"Ошибка при активации подписки: {e}")
+                        return jsonify({'error': f'Ошибка активации: {str(e)}'}), 500
+                else:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Подписка активирована (система подписок отключена)'
+                    })
+            else:
+                return jsonify({'error': 'Платеж не завершен'}), 400
+        else:
+            return jsonify({'error': 'Заказ не найден'}), 404
+
+    except Exception as e:
+        logger.error(f"Ошибка при активации подписки: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/webhook', methods=['POST'])
+def yookassa_webhook():
+    """Обработка webhook от ЮKassa"""
+    try:
+        data = request.json
+        event = data.get('event')
+        payment_object = data.get('object')
+        
+        if event == 'payment.succeeded' and payment_object:
+            payment_id = payment_object.get('id')
+            if payment_id in orders:
+                orders[payment_id]['status'] = 'succeeded'
+                logger.info(f"Платеж {payment_id} успешно завершен")
+        
+        return '', 200
+    except Exception as e:
+        logger.error(f"Ошибка при обработке webhook: {e}")
+        return '', 500
+
+def start_web_server():
+    """Запуск веб-сервера в отдельном потоке"""
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+def start_web_server_thread():
+    """Запуск веб-сервера в отдельном потоке"""
+    web_thread = threading.Thread(target=start_web_server, daemon=True)
+    web_thread.start()
+    logger.info("Веб-сервер запущен в отдельном потоке")
+
 # Для тестирования
 if __name__ == "__main__":
+    # Запускаем веб-сервер в отдельном потоке
+    start_web_server_thread()
+    
     # Запускаем бота
     main()

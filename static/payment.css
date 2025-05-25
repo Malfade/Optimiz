@@ -1,0 +1,363 @@
+/* Базовые стили для мини-приложения Telegram */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--tg-theme-bg-color, #ffffff);
+    color: var(--tg-theme-text-color, #000000);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* Заголовки */
+h1 {
+    text-align: center;
+    margin-bottom: 10px;
+    color: var(--tg-theme-text-color, #000000);
+    font-size: 24px;
+    font-weight: bold;
+}
+
+h2 {
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 15px;
+    font-size: 20px;
+}
+
+h3 {
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+/* Приветствие */
+.welcome {
+    text-align: center;
+    font-size: 16px;
+    margin-bottom: 5px;
+    color: var(--tg-theme-hint-color, #999999);
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 14px;
+    margin-bottom: 30px;
+    color: var(--tg-theme-hint-color, #999999);
+}
+
+/* Контейнер с планами */
+.plans-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+/* Карточка плана */
+.plan-card {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.plan-card:hover {
+    border-color: var(--tg-theme-button-color, #0088cc);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 136, 204, 0.15);
+}
+
+.plan-card.recommended {
+    border-color: var(--tg-theme-button-color, #0088cc);
+    background: linear-gradient(135deg, 
+        var(--tg-theme-button-color, #0088cc)22, 
+        var(--tg-theme-secondary-bg-color, #f8f9fa));
+}
+
+.plan-card.recommended::before {
+    content: "🔥 Популярный";
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--tg-theme-button-color, #0088cc);
+    color: var(--tg-theme-button-text-color, #ffffff);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    transform: rotate(15deg);
+}
+
+.plan-card h3 {
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 10px;
+    font-size: 20px;
+}
+
+.plan-card .price {
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--tg-theme-button-color, #0088cc);
+    margin-bottom: 10px;
+}
+
+.plan-card .description {
+    color: var(--tg-theme-hint-color, #999999);
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+/* Кнопка покупки */
+.buy-btn {
+    background: var(--tg-theme-button-color, #0088cc);
+    color: var(--tg-theme-button-text-color, #ffffff);
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.buy-btn:hover:not(:disabled) {
+    background: var(--tg-theme-button-color, #0077b3);
+    transform: translateY(-1px);
+}
+
+.buy-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Список возможностей */
+.features {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.features ul {
+    list-style: none;
+    padding: 0;
+}
+
+.features li {
+    padding: 8px 0;
+    color: var(--tg-theme-text-color, #000000);
+}
+
+/* Лоадер */
+.loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--tg-theme-hint-color, #e3e3e3);
+    border-top: 4px solid var(--tg-theme-button-color, #0088cc);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Сообщения об ошибках */
+.error-message {
+    background: #ff4757;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Модальные окна */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+    padding: 20px;
+}
+
+.modal-content {
+    background: var(--tg-theme-bg-color, #ffffff);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 400px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--tg-theme-hint-color, #999999);
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    color: var(--tg-theme-text-color, #000000);
+}
+
+/* Контейнер формы оплаты */
+.payment-form-container {
+    min-height: 200px;
+    margin-bottom: 20px;
+}
+
+.payment-help {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.check-payment-btn {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    color: var(--tg-theme-text-color, #000000);
+    border: 1px solid var(--tg-theme-hint-color, #999999);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+}
+
+.check-payment-btn:hover {
+    background: var(--tg-theme-hint-color, #e3e3e3);
+}
+
+/* Модальное окно успеха */
+.modal-content.success {
+    text-align: center;
+}
+
+.success-icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+}
+
+.success-btn {
+    background: #2ed573;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: all 0.3s ease;
+}
+
+.success-btn:hover {
+    background: #26d666;
+}
+
+/* Скрытые элементы */
+.hidden {
+    display: none !important;
+}
+
+/* Анимации */
+.modal-visible {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Адаптивность для очень маленьких экранов */
+@media (max-width: 320px) {
+    .container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 20px;
+    }
+    
+    .plan-card {
+        padding: 15px;
+    }
+    
+    .plan-card .price {
+        font-size: 28px;
+    }
+}
+
+/* Стили для YooKassa iframe */
+.yookassa-iframe {
+    width: 100%;
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Дополнительные стили для улучшения UX */
+.plan-card:active {
+    transform: translateY(0);
+}
+
+.buy-btn:active {
+    transform: translateY(0);
+} 

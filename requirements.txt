@@ -5,30 +5,36 @@
 pyTelegramBotAPI==4.21.0
 
 # Асинхронный клиент HTTP
-aiohttp==3.9.3
+aiohttp>=3.9.0,<4.0.0
 asyncio==3.4.3
 
 # Работа с изображениями
-pillow>=10.0.0
+Pillow>=10.0.0
 
 # Переменные окружения
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
 
 # HTTP-запросы
-requests==2.31.0
+requests>=2.31.0
 
 # Логирование и диагностика
-colorlog==6.8.0
+colorlog>=6.7.0
 
 # Flask для webhook-обработчика и проверки работоспособности
-flask==2.3.3
-flask-cors==4.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
 
 # Библиотеки для работы с датами и временем
-python-dateutil==2.8.2
+python-dateutil>=2.8.0
 
 # Библиотеки для безопасности
-pyjwt==2.8.0
+PyJWT>=2.8.0
 
 # Дополнительные зависимости для стабильности
-packaging>=20.0
+packaging>=23.0
+
+# Дополнительные зависимости для работы с платежами
+yookassa>=3.0.0
+cryptography>=41.0.0
+setuptools>=68.0.0
+wheel>=0.41.0
