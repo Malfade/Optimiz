@@ -1,0 +1,13 @@
+{
+  "users": {
+    "test_user": {
+      "plan_name": "3 скрипта",
+      "status": "active",
+      "created_at": 1751192921.954478,
+      "expires_at": 1753784921.954478,
+      "payment_id": "test_payment",
+      "generations_limit": 3,
+      "generations_used": 3
+    }
+  }
+}

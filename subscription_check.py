@@ -96,7 +96,7 @@ class SubscriptionManager:
                 self.active_cache[user_id] = False
                 logger.info(f"[DEBUG] User {user_id} marked as INACTIVE in cache: status={status}, expires check: {expires_at > current_time}")
     
-    def add_subscription(self, user_id, plan_name, duration_days=30, payment_id=None):
+    def add_subscription(self, user_id, plan_name, duration_days=30, payment_id=None, generations_limit=None):
         """
         Добавление новой подписки для пользователя
         
@@ -105,6 +105,7 @@ class SubscriptionManager:
             plan_name (str): Название плана подписки
             duration_days (int): Продолжительность подписки в днях
             payment_id (str): ID платежа в системе оплаты
+            generations_limit (int): Лимит генераций для подписки
             
         Returns:
             bool: True, если подписка успешно добавлена
@@ -114,8 +115,20 @@ class SubscriptionManager:
             user_id = str(user_id)
             logger.info(f"[DEBUG] Adding subscription for user ID: {user_id}, plan: {plan_name}, duration: {duration_days} days")
             
+            # Определяем лимит генераций по плану, если не указан
+            if generations_limit is None:
+                generations_map = {
+                    '1 скрипт': 1,
+                    '3 скрипта': 3,
+                    '10 скриптов': 10,
+                    'single': 1,
+                    'triple': 3,
+                    'pack': 10
+                }
+                generations_limit = generations_map.get(plan_name, 1)
+            
             # Проверяем статус платежа через API сервера монетизации
-            if payment_id:
+            if payment_id and not payment_id.startswith('test_'):
                 payment_status_url = f"{MONETIZATION_SERVER_URL}/api/payment-status/{payment_id}"
                 logger.info(f"[DEBUG] Checking payment status at {payment_status_url}")
                 
@@ -134,6 +147,8 @@ class SubscriptionManager:
                 except Exception as e:
                     logger.error(f"[DEBUG] Error checking payment status: {e}")
                     return False
+            elif payment_id and payment_id.startswith('test_'):
+                logger.info(f"[DEBUG] Skipping payment check for test payment: {payment_id}")
             
             # Создаем записи в структуре, если их еще нет
             if "users" not in self.subscriptions:
@@ -150,13 +165,15 @@ class SubscriptionManager:
                        f"formatted_start={now.strftime('%Y-%m-%d %H:%M:%S')}, "
                        f"formatted_end={datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')}")
             
-            # Добавляем информацию о подписке
+            # Добавляем информацию о подписке с поддержкой генераций
             self.subscriptions["users"][user_id] = {
                 "plan_name": plan_name,
                 "status": "active",
                 "created_at": now.timestamp(),
                 "expires_at": expires_at,
-                "payment_id": payment_id
+                "payment_id": payment_id,
+                "generations_limit": generations_limit,
+                "generations_used": 0
             }
             
             # Log subscription data after addition
@@ -169,7 +186,7 @@ class SubscriptionManager:
             self.active_cache[user_id] = True
             logger.info(f"[DEBUG] Manually updated active cache for user {user_id} to {self.active_cache.get(user_id)}")
             
-            logger.info(f"Добавлена подписка для пользователя {user_id}, план {plan_name}, " 
+            logger.info(f"Добавлена подписка для пользователя {user_id}, план {plan_name}, лимит генераций: {generations_limit}, " 
                        f"срок окончания: {datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')}")
             
             return True
@@ -324,6 +341,100 @@ class SubscriptionManager:
         
         return subscription
 
+    def can_generate_script(self, user_id):
+        """
+        Проверка возможности создания скрипта (есть ли доступные генерации)
+        
+        Args:
+            user_id (str): ID пользователя
+            
+        Returns:
+            bool: True, если пользователь может создать скрипт
+        """
+        user_id = str(user_id)
+        
+        # Сначала проверяем активную подписку
+        if not self.has_active_subscription(user_id):
+            return False
+        
+        # Получаем данные подписки
+        subscription = self.subscriptions["users"].get(user_id)
+        if not subscription:
+            return False
+        
+        generations_limit = subscription.get("generations_limit", 0)
+        generations_used = subscription.get("generations_used", 0)
+        
+        # Если лимит -1, то безлимитный план
+        if generations_limit == -1:
+            return True
+        
+        # Проверяем, есть ли доступные генерации
+        return generations_used < generations_limit
+
+    def use_generation(self, user_id):
+        """
+        Использование одной генерации (увеличение счетчика использованных генераций)
+        
+        Args:
+            user_id (str): ID пользователя
+            
+        Returns:
+            bool: True, если генерация успешно использована
+        """
+        user_id = str(user_id)
+        
+        if not self.can_generate_script(user_id):
+            return False
+        
+        # Получаем данные подписки
+        subscription = self.subscriptions["users"].get(user_id)
+        if not subscription:
+            return False
+        
+        # Увеличиваем счетчик использованных генераций
+        subscription["generations_used"] = subscription.get("generations_used", 0) + 1
+        
+        # Сохраняем данные
+        self._save_subscriptions()
+        
+        logger.info(f"Использована генерация для пользователя {user_id}. "
+                   f"Использовано: {subscription['generations_used']}/{subscription.get('generations_limit', 0)}")
+        
+        return True
+
+    def get_generations_info(self, user_id):
+        """
+        Получение информации о генерациях пользователя
+        
+        Args:
+            user_id (str): ID пользователя
+            
+        Returns:
+            dict: Информация о генерациях
+        """
+        user_id = str(user_id)
+        
+        if not self.has_active_subscription(user_id):
+            return {"has_subscription": False}
+        
+        subscription = self.subscriptions["users"].get(user_id)
+        if not subscription:
+            return {"has_subscription": False}
+        
+        generations_limit = subscription.get("generations_limit", 0)
+        generations_used = subscription.get("generations_used", 0)
+        generations_left = max(0, generations_limit - generations_used) if generations_limit != -1 else -1
+        
+        return {
+            "has_subscription": True,
+            "generations_limit": generations_limit,
+            "generations_used": generations_used,
+            "generations_left": generations_left,
+            "is_unlimited": generations_limit == -1,
+            "can_generate": self.can_generate_script(user_id)
+        }
+
 # Создаем глобальный экземпляр менеджера подписок
 subscription_manager = SubscriptionManager()
 
@@ -360,7 +471,7 @@ def check_user_subscription(user_id):
     
     return result
 
-def add_user_subscription(user_id, plan_name="Стандарт", duration_days=30, payment_id=None):
+def add_user_subscription(user_id, plan_name="Стандарт", duration_days=30, payment_id=None, generations_limit=None):
     """
     Функция для добавления подписки пользователя из других модулей
     
@@ -369,11 +480,12 @@ def add_user_subscription(user_id, plan_name="Стандарт", duration_days=3
         plan_name (str): Название плана подписки
         duration_days (int): Продолжительность подписки в днях
         payment_id (str): ID платежа в системе оплаты
+        generations_limit (int): Лимит генераций для подписки
         
     Returns:
         bool: True, если подписка успешно добавлена
     """
-    return subscription_manager.add_subscription(user_id, plan_name, duration_days, payment_id)
+    return subscription_manager.add_subscription(user_id, plan_name, duration_days, payment_id, generations_limit)
 
 def get_subscription_info(user_id):
     """
@@ -386,6 +498,42 @@ def get_subscription_info(user_id):
         dict: Информация о подписке или None, если подписки нет
     """
     return subscription_manager.get_subscription_details(user_id)
+
+def can_user_generate_script(user_id):
+    """
+    Проверка возможности создания скрипта пользователем
+    
+    Args:
+        user_id (str): ID пользователя
+        
+    Returns:
+        bool: True, если пользователь может создать скрипт
+    """
+    return subscription_manager.can_generate_script(user_id)
+
+def use_user_generation(user_id):
+    """
+    Использование одной генерации пользователем
+    
+    Args:
+        user_id (str): ID пользователя
+        
+    Returns:
+        bool: True, если генерация успешно использована
+    """
+    return subscription_manager.use_generation(user_id)
+
+def get_user_generations_info(user_id):
+    """
+    Получение информации о генерациях пользователя
+    
+    Args:
+        user_id (str): ID пользователя
+        
+    Returns:
+        dict: Информация о генерациях
+    """
+    return subscription_manager.get_generations_info(user_id)
 
 # Для тестирования
 if __name__ == "__main__":

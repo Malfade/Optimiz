@@ -208,15 +208,16 @@ user_files = {}   # Хранение файлов пользователей
 user_messages = {}  # Хранение текста сообщений
 
 # Функция проверки подписки перед действиями
-def check_subscription_before_action(message):
+def check_subscription_before_action(message, check_generations=False):
     """
     Проверяет подписку пользователя перед выполнением действия
     
     Args:
         message: Объект сообщения от Telegram
+        check_generations (bool): Проверять ли доступные генерации
         
     Returns:
-        bool: True если подписка активна, False если нет
+        bool: True если подписка активна и есть доступные генерации, False если нет
     """
     try:
         # Если проверка подписок отключена, пропускаем проверку
@@ -246,7 +247,7 @@ def check_subscription_before_action(message):
             
             # Добавляем кнопку оплаты через мини-приложение
             payment_button = types.InlineKeyboardButton(
-                text="💳 Оплатить подписку", 
+                text="💳 Купить скрипты", 
                 web_app=types.WebAppInfo(url=payment_url)
             )
             markup.add(payment_button)
@@ -254,13 +255,61 @@ def check_subscription_before_action(message):
             # Отправляем сообщение с кнопкой оплаты
             bot.send_message(
                 chat_id=message.chat.id, 
-                text="⚠️ *Ваша подписка не активна*\n\n"
-                     "Для использования всех функций бота необходимо приобрести подписку.\n\n"
-                     "💡 Нажмите кнопку ниже для выбора тарифа и оплаты:", 
+                text="⚠️ *У вас нет доступных скриптов*\n\n"
+                     "Для создания скриптов оптимизации необходимо купить пакет скриптов.\n\n"
+                     "📦 Доступные пакеты:\n"
+                     "• 1 скрипт - 49₽\n"
+                     "• 3 скрипта - 129₽ (экономия 15%)\n"
+                     "• 10 скриптов - 399₽ (экономия 20%)\n\n"
+                     "💡 Нажмите кнопку ниже для выбора пакета:", 
                 parse_mode="Markdown",
                 reply_markup=markup
             )
             return False
+        
+        # Если нужно проверить генерации
+        if check_generations:
+            from subscription_check import can_user_generate_script, get_user_generations_info
+            
+            if not can_user_generate_script(user_id):
+                # Получаем информацию о генерациях
+                gen_info = get_user_generations_info(user_id)
+                
+                # Получаем информацию о боте для передачи в мини-приложение
+                try:
+                    bot_info = bot.get_me()
+                    bot_username = bot_info.username
+                except Exception as e:
+                    logger.error(f"Ошибка при получении информации о боте: {e}")
+                    bot_username = "optimizator_bot"  # fallback значение
+                
+                # Создаем кнопку для покупки дополнительных скриптов
+                markup = types.InlineKeyboardMarkup()
+                payment_url = f"{PAYMENT_SYSTEM_URL}/?user_id={user_id}&bot_username={bot_username}"
+                
+                payment_button = types.InlineKeyboardButton(
+                    text="💳 Купить еще скрипты", 
+                    web_app=types.WebAppInfo(url=payment_url)
+                )
+                markup.add(payment_button)
+                
+                # Формируем сообщение о нехватке генераций
+                if gen_info.get("is_unlimited"):
+                    message_text = "⚠️ *Ошибка системы*\n\nОбратитесь в поддержку."
+                else:
+                    used = gen_info.get("generations_used", 0)
+                    limit = gen_info.get("generations_limit", 0)
+                    message_text = (f"⚠️ *Лимит скриптов исчерпан*\n\n"
+                                   f"Использовано: {used}/{limit} скриптов\n\n"
+                                   f"💡 Купите дополнительные скрипты для продолжения работы:")
+                
+                bot.send_message(
+                    chat_id=message.chat.id,
+                    text=message_text,
+                    parse_mode="Markdown",
+                    reply_markup=markup
+                )
+                return False
         
         return True
     except Exception as e:
@@ -2123,8 +2172,8 @@ def process_error_photo(message):
 def process_photo(message):
     """Обработка скриншота системы и создание скрипта оптимизации"""
     try:
-        # Проверяем подписку перед обработкой фото
-        if not check_subscription_before_action(message):
+        # Проверяем подписку и доступные генерации перед обработкой фото
+        if not check_subscription_before_action(message, check_generations=True):
             # Возвращаем пользователя в главное меню
             user_states[message.chat.id] = "main_menu"
             # Отображаем клавиатуру главного меню
@@ -2205,6 +2254,10 @@ def process_photo(message):
                     
                     # Отправляем файлы пользователю
                     asyncio.run(optimization_bot.send_script_files_to_user(message.chat.id, result))
+                    
+                    # Используем одну генерацию после успешного создания скрипта
+                    from subscription_check import use_user_generation
+                    use_user_generation(str(message.chat.id))
                     
                     # Обновляем статистику
                     global script_gen_count
@@ -2376,15 +2429,32 @@ def cmd_subscription(message):
         markup.add(webapp_button)
         
         if subscription_active:
-            # Получаем данные о подписке
+            # Получаем данные о подписке и генерациях
+            from subscription_check import get_user_generations_info
             subscription_info = get_subscription_info(message.chat.id)
+            generations_info = get_user_generations_info(message.chat.id)
+            
             days_left = subscription_info.get("days_left", 0)
-            plan_name = subscription_info.get("plan_name", "Стандартный")
+            plan_name = subscription_info.get("plan_name", "Пакет скриптов")
+            
+            # Формируем сообщение с информацией о генерациях
+            if generations_info.get("has_subscription"):
+                if generations_info.get("is_unlimited"):
+                    gen_text = "Безлимитные скрипты 🚀"
+                else:
+                    used = generations_info.get("generations_used", 0)
+                    limit = generations_info.get("generations_limit", 0)
+                    left = generations_info.get("generations_left", 0)
+                    gen_text = f"Скрипты: {left} из {limit} доступно ({used} использовано)"
+            else:
+                gen_text = "Нет доступных скриптов"
             
             # Отправляем краткую информацию с кнопкой
             bot.send_message(
                 message.chat.id, 
-                f"✅ У вас активна подписка *{plan_name}* (осталось дней: {days_left}).\n\nДля управления подпиской нажмите кнопку ниже:",
+                f"✅ *{plan_name}* (осталось дней: {days_left})\n\n"
+                f"📊 {gen_text}\n\n"
+                f"Для покупки дополнительных скриптов нажмите кнопку ниже:",
                 parse_mode="Markdown",
                 reply_markup=markup
             )
@@ -2645,7 +2715,8 @@ def activate_subscription():
         user_id = data.get('userId')
         order_id = data.get('orderId')
         plan_name = data.get('planName', 'Стандарт')
-        plan_duration = data.get('planDuration', 1/24)  # По умолчанию 1 час
+        plan_duration = data.get('planDuration', 30)  # По умолчанию 30 дней
+        generations_limit = data.get('generations_limit')
 
         if not user_id or not order_id:
             return jsonify({'error': 'Не указан ID пользователя или заказа'}), 400
@@ -2668,16 +2739,26 @@ def activate_subscription():
                 # Активируем подписку
                 if has_subscription_check:
                     try:
-                        add_user_subscription(user_id, plan_name, plan_duration)
-                        logger.info(f"Подписка успешно добавлена для пользователя {user_id}")
+                        add_user_subscription(user_id, plan_name, plan_duration, order_id, generations_limit)
+                        logger.info(f"Подписка успешно добавлена для пользователя {user_id} с лимитом генераций: {generations_limit}")
                         
                         # Отправляем уведомление пользователю в бот
                         try:
-                            duration_text = "1 час" if plan_duration < 1 else f"{int(plan_duration)} дней"
+                            from subscription_check import get_user_generations_info
+                            gen_info = get_user_generations_info(user_id)
+                            
+                            if gen_info.get("is_unlimited"):
+                                gen_text = "Безлимитные скрипты 🚀"
+                            else:
+                                limit = gen_info.get("generations_limit", 0)
+                                gen_text = f"{limit} скриптов"
+                            
                             bot.send_message(
                                 user_id,
-                                f"✅ Подписка '{plan_name}' успешно активирована на {duration_text}!\n\n"
-                                f"Теперь вы можете использовать все функции бота.",
+                                f"✅ Пакет '{plan_name}' успешно активирован!\n\n"
+                                f"📦 Доступно: {gen_text}\n"
+                                f"⏰ Срок действия: {int(plan_duration)} дней\n\n"
+                                f"Теперь вы можете создавать скрипты оптимизации!",
                                 parse_mode="Markdown"
                             )
                         except Exception as notification_error:
@@ -2685,7 +2766,7 @@ def activate_subscription():
                         
                         return jsonify({
                             'success': True,
-                            'message': f'Подписка успешно активирована на {"1 час" if plan_duration < 1 else f"{int(plan_duration)} дней"}',
+                            'message': f'Пакет успешно активирован на {int(plan_duration)} дней',
                             'expires_at': (datetime.now().timestamp() + plan_duration * 24 * 3600)
                         })
                     except Exception as e:
